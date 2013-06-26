@@ -1,0 +1,60 @@
+all: binaries
+
+CFLAGS = -g -Wall -Werror
+
+parser.o: parser.y
+	bison --output=parser.c --defines=parser.h --report=state parser.y
+	cc $(CFLAGS) -c parser.c
+
+lexer.o: lexer.l parser.o
+	flex -olexer.c lexer.l
+	cc -O2 -g -Wall -c lexer.c
+
+packetdrill-lib := checksum.o code.o config.o hash.o hash_map.o ip_address.o \
+         netdev.o net_utils.o \
+         packet.o packet_socket_linux.o packet_socket_pcap.o \
+         packet_checksum.o packet_parser.o packet_to_string.o \
+         symbols_linux.o \
+         symbols_freebsd.o \
+         symbols_openbsd.o \
+         symbols_netbsd.o \
+         icmp_packet.o ip_packet.o tcp_packet.o udp_packet.o \
+         run.o run_command.o run_packet.o run_system_call.o \
+         script.o socket.o system.o \
+         tcp_options.o tcp_options_iterator.o tcp_options_to_string.o \
+         logging.o types.o lexer.o parser.o \
+         fmemopen.o open_memstream.o \
+         link_layer.o wire_conn.o wire_protocol.o \
+         wire_client.o wire_client_netdev.o \
+         wire_server.o wire_server_netdev.o
+
+packetdrill-objs := packetdrill.o $(packetdrill-lib)
+
+packetdrill: $(packetdrill-objs)
+	gcc -o packetdrill -g -static $(packetdrill-objs) $(packetdrill-ext-libs)
+
+test-bins := checksum_test packet_parser_test packet_to_string_test
+tests: $(test-bins)
+	./checksum_test
+	./packet_parser_test
+	./packet_to_string_test
+
+binaries: packetdrill $(test-bins)
+
+checksum_test-objs := $(packetdrill-lib) checksum_test.o
+checksum_test: $(checksum_test-objs)
+	gcc -o checksum_test $(checksum_test-objs) $(packetdrill-ext-libs)
+
+packet_parser_test-objs := $(packetdrill-lib) packet_parser_test.o
+packet_parser_test: $(packet_parser_test-objs)
+	gcc -o packet_parser_test $(packet_parser_test-objs) \
+                $(packetdrill-ext-libs)
+
+packet_to_string_test-objs := $(packetdrill-lib) packet_to_string_test.o
+packet_to_string_test: $(packet_to_string_test-objs)
+	gcc -o 	packet_to_string_test $(packet_to_string_test-objs) \
+                $(packetdrill-ext-libs)
+
+clean:
+	/bin/rm -f *.o packetdrill lexer.c parser.c parser.h parser.output \
+                $(test-bins)

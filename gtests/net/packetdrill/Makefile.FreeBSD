@@ -1,0 +1,2 @@
+packetdrill-ext-libs := -lpthread -lpcap
+.include "Makefile.common"
