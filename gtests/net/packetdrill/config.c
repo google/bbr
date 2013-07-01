@@ -57,6 +57,7 @@ enum option_codes {
 	OPT_WIRE_SERVER_DEV,
 	OPT_TCP_TS_TICK_USECS,
 	OPT_NON_FATAL,
+	OPT_DRY_RUN,
 	OPT_VERBOSE = 'v',	/* our only single-letter option */
 };
 
@@ -84,6 +85,7 @@ struct option options[] = {
 	{ "wire_server_dev",	.has_arg = true,  NULL, OPT_WIRE_SERVER_DEV },
 	{ "tcp_ts_tick_usecs",	.has_arg = true,  NULL, OPT_TCP_TS_TICK_USECS },
 	{ "non_fatal",		.has_arg = true,  NULL, OPT_NON_FATAL },
+	{ "dry_run",		.has_arg = false, NULL, OPT_DRY_RUN },
 	{ "verbose",		.has_arg = false, NULL, OPT_VERBOSE },
 	{ NULL },
 };
@@ -113,6 +115,7 @@ void show_usage(void)
 		"\t[--wire_server_port=<server_port>]\n"
 		"\t[--wire_client_dev=<eth_dev_name>]\n"
 		"\t[--wire_server_dev=<eth_dev_name>]\n"
+		"\t[--dry_run]\n"
 		"\t[--verbose|-v]\n"
 		"\tscript_path ...\n");
 }
@@ -442,6 +445,9 @@ static void process_option(int opt, char *optarg, struct config *config,
 		break;
 	case OPT_WIRE_SERVER_DEV:
 		config->wire_server_device = strdup(optarg);
+		break;
+	case OPT_DRY_RUN:
+		config->dry_run = true;
 		break;
 	case OPT_VERBOSE:
 		config->verbose = true;

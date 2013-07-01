@@ -176,7 +176,7 @@ void read_script(const char *script_path, struct script *script)
 
 		/* Allocate a buffer big enough for the whole file. */
 		if (stat(script_path, &script_info) != 0)
-			die("stat() of script file '%s': %s\n",
+			die("parse error: stat() of script file '%s': %s\n",
 			    script_path, strerror(errno));
 
 		/* Pick a buffer size larger than the file, so we'll
@@ -190,12 +190,12 @@ void read_script(const char *script_path, struct script *script)
 		/* Read the file into our buffer. */
 		fd = open(script_path, O_RDONLY);
 		if (fd < 0)
-			die("error opening script file '%s': %s\n",
+			die("parse error opening script file '%s': %s\n",
 			    script_path, strerror(errno));
 
 		script->length = read(fd, script->buffer, size);
 		if (script->length < 0)
-			die("error reading script file '%s': %s\n",
+			die("parse error reading script file '%s': %s\n",
 			    script_path, strerror(errno));
 
 		/* If we filled the buffer, then probably another
@@ -239,7 +239,7 @@ int parse_script(const struct config *config,
 	/* Now parse the script from our buffer. */
 	yyin = fmemopen(script->buffer, script->length, "r");
 	if (yyin == NULL)
-		die_perror("fmemopen: error opening script buffer");
+		die_perror("fmemopen: parse error opening script buffer");
 
 	current_script_path = config->script_path;
 	in_config = config;
@@ -280,7 +280,7 @@ static void yyerror(const char *message)
 static void semantic_error(const char* message)
 {
 	assert(current_script_line >= 0);
-	die("%s:%d: error: %s\n",
+	die("%s:%d: semantic error: %s\n",
 	    current_script_path, current_script_line, message);
 }
 

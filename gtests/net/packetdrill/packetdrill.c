@@ -101,6 +101,10 @@ int main(int argc, char *argv[])
 						script_path, NULL))
 			exit(EXIT_FAILURE);
 
+		/* If --dry_run, then don't actually execute the script. */
+		if (config.dry_run)
+			continue;
+
 		run_init_scripts(&config);
 		run_script(&config, &script);
 	}

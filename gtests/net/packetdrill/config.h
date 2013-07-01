@@ -78,6 +78,8 @@ struct config {
 	bool non_fatal_packet;		/* treat packet asserts as non-fatal */
 	bool non_fatal_syscall;		/* treat syscall asserts as non-fatal */
 
+	bool dry_run;			/* parse script but don't execute? */
+
 	bool verbose;			/* print detailed debug info? */
 	char *script_path;		/* pathname of script file */
 
@@ -101,7 +103,6 @@ struct config {
 	struct ip_address wire_server_ip;  /* IP of on-the-wire server */
 	char *wire_server_ip_string;	   /* malloc-ed server IP string */
 	u16 wire_server_port;		   /* the port the server listens on */
-
 };
 
 /* Top-level info about the invocation of a test script */
