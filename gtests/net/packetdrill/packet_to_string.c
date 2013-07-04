@@ -100,6 +100,7 @@ static int tcp_packet_to_string(FILE *s, struct packet *packet,
 			result = STATUS_ERR;
 		else
 			fprintf(s, "<%s>", tcp_options);
+		free(tcp_options);
 	}
 
 	if (format == DUMP_VERBOSE)
