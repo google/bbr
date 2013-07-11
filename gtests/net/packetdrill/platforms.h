@@ -43,11 +43,15 @@
 
 #if defined(__FreeBSD__)
 
+#include <sys/param.h>
 #define USE_LIBPCAP             1
 #define TUN_PATH                "/dev/tun0"
 #define TUN_DEV                 "tun0"
 
 #define HAVE_TCP_INFO           1
+#if __FreeBSD_version > 1000028
+#define HAVE_FMEMOPEN           1
+#endif
 
 #include "open_memstream.h"
 #include "fmemopen.h"
