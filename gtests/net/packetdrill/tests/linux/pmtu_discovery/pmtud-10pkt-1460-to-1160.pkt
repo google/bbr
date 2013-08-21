@@ -1,0 +1,54 @@
+// Test Path MTU discovery, RFC 1191.
+// This is a more substantive case, with 10*original_mss to send.
+// In this variant, we get an ICMP "unreachable frag_needed mtu 1200"
+// message and because the TCP sequence number is valid, TCP
+// immediately retransmits 'cwnd' packets using a smaller MSS
+// based on the MTU from the ICMP message.
+
+// Establish a connection.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1460,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+// Send 10 data segments.
+0.200 write(4, ..., 14600) = 14600
+0.200 > P. 1:14601(14600) ack 1
+
+// ICMP says that the first segment was too big.
+0.250 < [1:1461(1460)] icmp unreachable frag_needed mtu 1200
+// TCP picks a packet size using the MTU from the message, and
+// retransmits 'cwnd' packets:
+0.250 > . 1:1161(1160) ack 1
+0.250 > . 1161:2321(1160) ack 1
+0.250 > . 2321:3481(1160) ack 1
+0.250 > . 3481:4641(1160) ack 1
+0.250 > . 4641:5801(1160) ack 1
+0.250 > . 5801:6961(1160) ack 1
+0.250 > . 6961:8121(1160) ack 1
+0.250 > . 8121:9281(1160) ack 1
+0.250 > . 9281:10441(1160) ack 1
+0.250 > . 10441:11601(1160) ack 1
+
+// ACKs for packets retransmitted at a smaller MSS release yet more packets...
+
+0.350 < . 1:1(0) ack 1161 win 257
+0.350 > . 11601:12761(1160) ack 1
+0.350 > . 12761:13921(1160) ack 1
+
+0.355 < . 1:1(0) ack 2321 win 257
+0.355 > P. 13921:14601(680) ack 1
+
+// Receiver ACKs all data.
+0.455 < . 1:1(0) ack 14601 win 257
+
+// Clean up.
+0.500 close(4) = 0
+0.500 > F. 14601:14601(0) ack 1
+0.600 < F. 1:1(0) ack 14602 win 257
+0.600 > . 14602:14602(0) ack 2

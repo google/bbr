@@ -1,0 +1,27 @@
+// Test TCP_MAXSEG works on passive/server TCP connections.
+
+// Set up a listening socket.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+// Set MSS to 1100.
+0.010 setsockopt(3, SOL_TCP, TCP_MAXSEG, [1100], 4) = 0
+// TODO(ncardwell): the following is silly; should we fix it?
+0.020 getsockopt(3, SOL_TCP, TCP_MAXSEG, [536], [4]) = 0
+
+// Establish a connection with an outgoing advertised MSS of 1100.
+0.100 < S 0:0(0) win 32792 <mss 1300,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1100,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+
+0.300 accept(3, ..., ...) = 4
+
+0.400 getsockopt(4, SOL_TCP, TCP_MAXSEG, [1100], [4]) = 0
+
+0.500 %{ assert tcpi_advmss == 1100; assert tcpi_snd_mss == 1100 }%
+
+// IW10 MSS should yield outgoing TSO packet with 10*1100 == 11000 bytes:
+0.600 write(4, ..., 12000) = 12000
+0.600 > . 1:11001(11000) ack 1

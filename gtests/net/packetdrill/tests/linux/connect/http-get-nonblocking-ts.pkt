@@ -1,0 +1,34 @@
+// A simple client-side HTTP-style test that does a connect, sends a
+// short request, and receives a short response.
+
+// Create a socket and set it to non-blocking.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 fcntl(3, F_GETFL) = 0x2 (flags O_RDWR)
+0.000 fcntl(3, F_SETFL, O_RDWR|O_NONBLOCK) = 0
+
+// Establish connection and verify that there was no error.
+0.100 connect(3, ..., ...) = -1 EINPROGRESS (Operation now in progress)
+0.100 > S 0:0(0) <mss 1460,sackOK,TS val 100 ecr 0,nop,wscale 6>
+0.200 < S. 0:0(0) ack 1 win 5792 <mss 1460,sackOK,TS val 700 ecr 100,nop,wscale 7>
+0.200 > . 1:1(0) ack 1 <nop,nop,TS val 200 ecr 700>
+0.200 getsockopt(3, SOL_SOCKET, SO_ERROR, [0], [4]) = 0
+0.200 fcntl(3, F_SETFL, O_RDWR) = 0   // set back to blocking
+
+// Send the HTTP request.
+0.200 write(3, ..., 57) = 57
+0.200 > P. 1:58(57) ack 1 <nop,nop,TS val 200 ecr 700>
+0.300 < . 1:1(0) ack 58 win 92 <nop,nop,TS val 800 ecr 200>
+
+// Receive the HTTP response and the server's FIN.
+0.300 < P. 1:786(785) ack 58 win 92 <nop,nop,TS val 800 ecr 200>
+0.300 > . 58:58(0) ack 786 <nop,nop,TS val 300 ecr 800>
+0.300 < F. 786:786(0) ack 58 win 92 <nop,nop,TS val 800 ecr 200>
+0.300 read(3, ..., 1024) = 785
+0.300 read(3, ..., 1024) = 0
+// Delayed ACK.
+0.340 > . 58:58(0) ack 787 <nop,nop,TS val 300 ecr 800>
+
+// Close the connection.
+0.350 close(3) = 0
+0.350 > F. 58:58(0) ack 787 <nop,nop,TS val 300 ecr 800>
+0.450 < . 787:787(0) ack 59 win 92 <nop,nop,TS val 900 ecr 300>

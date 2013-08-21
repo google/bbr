@@ -1,0 +1,44 @@
+// Test fast recovery and undo: send 10 MSS, get 3 dupacks, do a
+// fast retransmit, get a DSACK for the retransmitted segment, and
+// undo the cwnd reduction.
+// Assumes initial cwnd is 10. Receiver supports SACK.
+//
+// In this variant the original ACKs are lost, and all the sender gets is
+// a DSACK.
+
+// Establish a connection.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+// Send 10 MSS.
+0.200 write(4, ..., 10000) = 10000
+0.200 > P. 1:10001(10000) ack 1
+
+// Get 3 dupacks.
+0.300 < . 1:1(0) ack 1 win 257 <sack 1001:2001,nop,nop>
+0.300 < . 1:1(0) ack 1 win 257 <sack 1001:3001,nop,nop>
+0.300 < . 1:1(0) ack 1 win 257 <sack 1001:4001,nop,nop>
+// We've received 3 duplicate ACKs, so we do a fast retransmit.
+0.300 > . 1:1001(1000) ack 1
+0.300 %{ assert tcpi_snd_cwnd == 7 }%
+
+// Apparently just reordering. Retransmit was spurious.
+// Original ACKs for sequence ranges up to 10001 are all lost.
+
+// Receiver sends DSACK for retransmitted packet.
+0.400 < . 1:1(0) ack 10001 win 257 <sack 1:1001,nop,nop>
+
+// Verify that the DSACK caused an undo, restoring cwnd to 10.
+0.400 write(4, ..., 11000) = 11000
+0.400 > . 10001:20001(10000) ack 1
+0.400 %{
+assert tcpi_snd_cwnd == 10
+assert tcpi_unacked == 10
+}%

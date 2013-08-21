@@ -1,0 +1,17 @@
+// Test that getsockopt of TCP_MAXSEG works on active/client TCP connections.
+// In this variant we test that a simple query of segment size works,
+// in the case where TCP timestamps reduce the usable payload space.
+
+// Create a socket.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+
+0.100...0.200 connect(3, ..., ...) = 0
+
+// Establish a connection.
+0.100 > S 0:0(0) <mss 1460,sackOK,TS val 100 ecr 0,nop,wscale 6>
+0.200 < S. 0:0(0) ack 1 win 32792 <mss 1100,sackOK,TS val 200 ecr 100,nop,wscale 7>
+0.200 > . 1:1(0) ack 1 <nop,nop,TS val 200 ecr 200>
+
+// Verify that the kernel reduced the returned segment size
+// to account for TCP timestamps.
+0.300 getsockopt(3, SOL_TCP, TCP_MAXSEG, [1088], [4]) = 0

@@ -1,0 +1,17 @@
+// A simple test of initRTO (sysctl_tcp_synack_rto, default to 1sec) for
+// the passive open side.
+
+// We want the SYN-ACK to be retransmitted 1 sec after the SYN, but
+// usually it happens at 1.2 or 1.4 sec due to the fact that the
+// kernel only schedules SYN-ACK retransmissions periodically.
+// Specifically, the TCP_SYNQ_INTERVAL (period of the SYN-ACK timer) is 200ms.
+--tolerance_usecs=405000
+
+// Create a listener socket.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+0.100 < S 0:0(0) win 32792 <mss 1460,sackOK,nop,nop,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+1.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>

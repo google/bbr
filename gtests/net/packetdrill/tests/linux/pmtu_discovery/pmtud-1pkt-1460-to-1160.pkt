@@ -1,0 +1,36 @@
+// Test Path MTU discovery, RFC 1191.
+// This is a simple case, with one packet to send.
+// In this variant, we get an ICMP "unreachable frag_needed mtu 1200"
+// message and because the TCP sequence number is valid, TCP
+// immediately retransmits our first outstanding packet
+// with a smaller MSS based on the MTU from the ICMP message.
+
+// Establish a connection.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1460,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+// Send 1 data segment.
+0.200 write(4, ..., 1460) = 1460
+0.200 > P. 1:1461(1460) ack 1
+
+// ICMP says that segment was too big.
+0.250 < [1:1461(1460)] icmp unreachable frag_needed mtu 1200
+// TCP picks a packet size using the MTU from the message, and retransmits.
+0.250 > . 1:1161(1160) ack 1
+0.250 > P. 1161:1461(300) ack 1
+
+// Receiver ACKs all data.
+0.350 < . 1:1(0) ack 1461 win 257
+
+// Clean up.
+1.300 close(4) = 0
+1.300 > F. 1461:1461(0) ack 1
+1.400 < F. 1:1(0) ack 1462 win 257
+1.400 > . 1462:1462(0) ack 2

@@ -1,0 +1,39 @@
+// Test shifting of newly-SACKed ranges onto the previous already-SACKed skb.
+// This variant receives a SACK for segment 1 and then a SACK for
+// segments 1-6, to check handling of large newly-SACKed ranges.
+
+// Establish a connection and send 10 MSS.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 1024
+0.200 accept(3, ..., ...) = 4
+
+0.200 write(4, ..., 10000) = 10000
+0.200 > P. 1:10001(10000) ack 1
+0.200 %{
+assert tcpi_reordering == 3
+assert tcpi_unacked == 10
+assert tcpi_sacked ==  0
+}%
+
+0.300 < . 1:1(0) ack 1 win 257 <sack 1001:2001,nop,nop>
+0.300 %{
+assert tcpi_reordering == 3
+assert tcpi_unacked == 10
+assert tcpi_sacked ==  1
+}%
+
+// This SACK for an adjacent range causes the sender to
+// shift the newly-SACKed range onto the previous skb.
+0.310 < . 1:1(0) ack 1 win 257 <sack 1001:7001,nop,nop>
+0.310 %{
+assert tcpi_reordering == 3
+assert tcpi_unacked == 10
+assert tcpi_sacked ==  6
+assert tcpi_ca_state == TCP_CA_Recovery
+}%

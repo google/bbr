@@ -1,0 +1,27 @@
+// Test delayed ER with 2 packets outstanding, receiver sending SACKs.
+
+// Enable delayed early retransmit.
+`sysctl -q net.ipv4.tcp_early_retrans=2`
+
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1460,sackOK,nop,nop,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+0.200 write(4, ..., 2920) = 2920
+0.200 > P. 1:2921(2920) ack 1
+0.300 < . 1:1(0) ack 1 win 257 <sack 1461:2921,nop,nop>
+0.325 > . 1:1461(1460) ack 1  // delayed Early Retransmit at RTT/4 = 25ms
+0.425 < . 1:1(0) ack 2921 win 257
+
+0.500 close(4) = 0
+0.500 > F. 2921:2921(0) ack 1
+0.600 < F. 1:1(0) ack 2922 win 257
+0.601 > . 2922:2922(0) ack 2
+
+0.700 `sysctl -q net.ipv4.tcp_early_retrans=3`

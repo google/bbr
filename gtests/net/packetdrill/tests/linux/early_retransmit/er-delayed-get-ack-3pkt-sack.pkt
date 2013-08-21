@@ -1,0 +1,35 @@
+// Test delayed ER with 3 packets outstanding, receiver sending SACKs.
+// Added wrinkles: (1) sender gets an ACK before delayed ER timer fires,
+// so we don't do the originally scheduled ER but instead reschedule
+// the ER timer for later.
+
+// Enable delayed early retransmit.
+`sysctl -q net.ipv4.tcp_early_retrans=2`
+
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1460,sackOK,nop,nop,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+0.200 write(4, ..., 4380) = 4380
+0.200 > P. 1:4381(4380) ack 1
+0.300 < . 1:1(0) ack 1 win 257 <sack 1461:2921,nop,nop>
+0.300 < . 1:1(0) ack 1 win 257 <sack 1461:4381,nop,nop>
+// Next we get an ACK before ER fires. Any ACK should cause us
+// to cancel ER timer, whether it ACKs new data or (as in this case) does not.
+// Then we reschedule the ER timer again.
+0.310 < . 1:1(0) ack 1 win 257 <sack 1461:4381,nop,nop>
+0.335 > . 1:1461(1460) ack 1  // delayed ER at 0.310 + RTT/4=25ms
+0.435 < . 1:1(0) ack 4381 win 257
+
+0.700 close(4) = 0
+0.700 > F. 4381:4381(0) ack 1
+0.800 < F. 1:1(0) ack 4382 win 257
+0.800 > . 4382:4382(0) ack 2
+
+0.900 `sysctl -q net.ipv4.tcp_early_retrans=3`

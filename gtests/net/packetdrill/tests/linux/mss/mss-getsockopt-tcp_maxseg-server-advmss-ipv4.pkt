@@ -1,0 +1,29 @@
+// Test that getsockopt of TCP_MAXSEG works on passive/server TCP connections.
+// In this variant we test that we get the expected result when
+// the routing config specifies an "advmss 1430 mtu lock 1470" for the
+// route to the remote IP under test.
+
+// To ensure that we do not cache something that interferes with other tests:
+--remote_ip="192.0.2.2"
+
+`ip route change 192.0.2.2 via 192.168.0.2 dev tun0 advmss 1430 mtu lock 1470`
+
+// Set up a listening socket.
+0  socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
++0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
++0 bind(3, ..., ...) = 0
++0 listen(3, 1) = 0
+
+// Establish a connection without timestamps.
++0 < S 0:0(0) win 32792 <mss 1460,sackOK,nop,nop,nop,wscale 7>
++0 > S. 0:0(0) ack 1    <mss 1430,nop,nop,sackOK,nop,wscale 6>
++0 < . 1:1(0) ack 1 win 257
+
++0 accept(3, ..., ...) = 4
+
+// Verify that the kernel returns the expected TCP max payload size.
++0 getsockopt(4, SOL_TCP, TCP_MAXSEG, [1430], [4]) = 0
+
++0 write(4, ..., 1500) = 1500
++0 > .  1:1431(1430)  ack 1
++0 > P. 1431:1501(70) ack 1

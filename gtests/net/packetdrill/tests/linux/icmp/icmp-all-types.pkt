@@ -1,0 +1,71 @@
+// Test handling of incoming ICMP packets.
+// This test tests all known ICMP packet types, and a few unknown
+// types.
+
+// Establish a connection.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1460,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+// Send 1 data segment.
+0.200 write(4, ..., 1460) = 1460
+0.200 > P. 1:1461(1460) ack 1
+
+// We get lots of incoming ICMP messages.
+
+// First the unreachable type and all its codes
+0.300 < icmp unreachable net_unreachable
+0.301 < icmp unreachable host_unreachable
+0.302 < icmp unreachable protocol_unreachable
+0.303 < icmp unreachable port_unreachable
+0.304 < icmp unreachable frag_needed mtu 1234
+0.305 < icmp unreachable source_route_failed
+0.306 < icmp unreachable net_unknown
+0.307 < icmp unreachable host_unknown
+0.308 < icmp unreachable source_host_isolated
+0.309 < icmp unreachable net_prohibited
+0.310 < icmp unreachable host_prohibited
+0.311 < icmp unreachable net_unreachable_for_tos
+0.312 < icmp unreachable host_unreachable_for_tos
+0.313 < icmp unreachable packet_filtered
+0.314 < icmp unreachable precedence_violation
+0.315 < icmp unreachable precedence_cutoff
+
+// Then all the other types. These are legal because the code is optional.
+0.400 < icmp echo_reply
+0.401 < icmp source_quench
+0.402 < icmp redirect
+0.403 < icmp echo_request
+0.404 < icmp time_exceeded
+0.405 < icmp parameter_problem
+0.406 < icmp timestamp_request
+0.407 < icmp timestamp_reply
+0.408 < icmp information_request
+0.409 < icmp information_reply
+0.410 < icmp address_mask_request
+0.411 < icmp address_mask_reply
+
+// Now try symbolic types with numeric codes.
+0.450 < icmp unreachable code_0
+0.451 < icmp unreachable code_1
+0.452 < icmp unreachable code_255
+
+// Now try numeric types with numeric codes
+0.460 < icmp type_0 code_0
+0.461 < icmp type_1 code_0
+0.462 < icmp type_255 code_0
+
+// Receiver ACKs all data.
+0.470 < . 1:1(0) ack 1461 win 257
+
+// Clean up.
+0.600 close(4) = 0
+0.600 > F. 1461:1461(0) ack 1
+0.700 < F. 1:1(0) ack 1462 win 257
+0.700 > . 1462:1462(0) ack 2

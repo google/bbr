@@ -1,0 +1,29 @@
+// Test inet_diag for AF_INET6 sockets with IPv4 traffic.
+// We use the "ss" socket statistics tool, which uses inet_diag sockets.
+// We use the default tcptest local IP address for IPv4-mapped-IPv6.
+
+// Options (command line arguments in script file) to force ipv4-mapped-ipv6.
+--ip_version="ipv4-mapped-ipv6"
+
+// Establish a connection.
+0  socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+
++0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
++0 bind(3, ..., ...) = 0
++0 listen(3, 1) = 0
+
++0 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 2>
++0 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+
++0 `ss -6 -n state SYN-RECV | grep ::ffff:192.168.0.1:8080 > /dev/null`
+
++0 < . 1:1(0) ack 1 win 32890
+
++0 accept(3, ..., ...) = 4
+
+// first, use inet_diag with no filter:
++0 `ss -6 -n | grep ::ffff:192.168.0.1:8080 > /dev/null`
+
+// then try filters, which use a different code path:
++0 `ss -6 -n --options --extended --info '( sport = :8080 )' | grep ::ffff:192.168.0.1:8080 > /dev/null`
++0 `ss -6 -n --options --extended --info '( sport = :8080 )' src ::ffff:192.168.0.1/128 | grep ::ffff:192.168.0.1:8080 > /dev/null`

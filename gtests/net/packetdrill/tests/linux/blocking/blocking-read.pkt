@@ -1,0 +1,25 @@
+// Test for blocking read.
+
+// Establish a connection.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1000,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+0.200...0.300 read(4, ..., 2000) = 2000
+0.300 < P. 1:2001(2000) ack 1 win 257
+0.300 > . 1:1(0) ack 2001
+
+0.400...0.500 read(4, ..., 2000) = 2000
+0.500 < P. 2001:4001(2000) ack 1 win 257
+0.500 > . 1:1(0) ack 4001
+
+0.600 < P. 4001:6001(2000) ack 1 win 257
+0.600 > . 1:1(0) ack 6001
+0.600...0.600 read(4, ..., 1000) = 1000
+0.600...0.600 read(4, ..., 1000) = 1000

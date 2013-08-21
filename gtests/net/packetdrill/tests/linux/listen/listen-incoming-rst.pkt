@@ -1,0 +1,22 @@
+// Test behavior when a listener gets an incoming packet that has
+// the RST bit set but not the SYN bit set.
+
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < R 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+
+// The TCP stack should not respond to incoming RSTs, or else
+// we could get infinite RST ping-pong storms.
+
+// Now make sure that when a valid SYN arrives shortly thereafter
+// (with the same address 4-tuple) we can still successfully establish
+// a connection.
+
+0.200 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+0.200 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+
+0.300 < . 1:1(0) ack 1 win 320
+0.300 accept(3, ..., ...) = 4

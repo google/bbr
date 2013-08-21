@@ -1,0 +1,7 @@
+Packetdrill tests for Linux.
+
+This directory contains Packetdrill tests for Linux.  The tests all pass under
+kernel 3.11.0-rc4 (installed on an Ubuntu 13.04 machine).  However, due to TCP
+metrics caching in recent kernels, a second run of all tests can result in
+failures.  The script run_tests.sh in this directory uses the iproute tool to
+flush the TCP metrics cache before each test.

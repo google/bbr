@@ -1,0 +1,55 @@
+// Test fast recovery and undo: send 10 MSS, get 3 dupacks, do a
+// fast retransmit, get a DSACK for the retransmitted segment, and
+// undo the cwnd reduction.
+// Assumes initial cwnd is 10. Receiver supports SACK.
+//
+// In this variant there is reordering in the return path,
+// so that we end up getting an ACK below snd_una that
+// has the critical DSACK that tells us we need to undo.
+
+// Establish a connection.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+// Send 10 MSS.
+0.200 write(4, ..., 10000) = 10000
+0.200 > P. 1:10001(10000) ack 1
+
+// Get 3 dupacks.
+0.300 < . 1:1(0) ack 1 win 257 <sack 1001:2001,nop,nop>
+0.300 < . 1:1(0) ack 1 win 257 <sack 1001:3001,nop,nop>
+0.300 < . 1:1(0) ack 1 win 257 <sack 1001:4001,nop,nop>
+// We've received 3 duplicate ACKs, so we do a fast retransmit.
+0.300 > . 1:1001(1000) ack 1
+// Apparently just reordering; receiver ACKs all data. Retransmit was spurious.
+0.300 < . 1:1(0) ack 4001 win 257
+0.300 < . 1:1(0) ack 6001 win 257
+0.300 < . 1:1(0) ack 8001 win 257
+0.300 < . 1:1(0) ack 10001 win 257
+
+// We send some more new data so we can have an ACK that races our DSACK.
+0.303 write(4, ..., 1000) = 1000
+0.303 > P. 10001:11001(1000) ack 1
+
+// Receiver ACKs all outstanding data.
+0.400 < . 1:1(0) ack 11001 win 257
+
+// Oops; there was reordering in the ACK path!
+// Now we get the DSACK for the retransmitted packet.
+// It's a DSACK on an ack below snd_una.
+0.401 < . 1:1(0) ack 10001 win 257 <sack 1:1001,nop,nop>
+
+// Verify that the DSACK caused an undo, restoring cwnd to 10.
+0.450 write(4, ..., 11000) = 11000
+0.450 > . 11001:21001(10000) ack 1
+0.450 %{
+assert tcpi_snd_cwnd == 10
+assert tcpi_unacked == 10
+}%

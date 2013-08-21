@@ -1,0 +1,30 @@
+// A simple test for the TCP SIOCINQ ioctl.
+
+// Create a socket.
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+// Establish a connection.
+0.100 < S 0:0(0) win 20000 <mss 1000,sackOK,nop,nop>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK>
+0.200 < . 1:1(0) ack 1 win 20000
+0.200 accept(3, ..., ...) = 4
+
+// Receive a segment.
+0.200 < P. 1:1001(1000) ack 1 win 257
+0.200 > . 1:1(0) ack 1001
+
+0.210 ioctl(4, SIOCINQ, [1000]) = 0
+0.220 read(4, ..., 1000) = 1000
+0.230 ioctl(4, SIOCINQ, [0]) = 0
+
+// Receive a segment with a FIN.
+0.300 < FP. 1001:2001(1000) ack 1 win 257
+0.300 > . 1:1(0) ack 2002
+
+0.310 ioctl(4, SIOCINQ, [1000]) = 0
+0.320 read(4, ..., 1000) = 1000
+0.330 ioctl(4, SIOCINQ, [0]) = 0

@@ -1,0 +1,38 @@
+// If we close the connection after read()'ing what
+// the other side sent, a FIN will be generated. This
+// behavior conforms to RFC 793.
+
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 32792 <mss 1460,sackOK,nop,nop,nop,wscale 7>
+0.100 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 6>
+0.200 < . 1:1(0) ack 1 win 257
+0.200 accept(3, ..., ...) = 4
+
+// Receive first segment
+0.210 < P. 1:1001(1000) ack 1 win 46
+
+// Send one ACK
+0.210 > . 1:1(0) ack 1001
+
+// Application writes 1000 bytes
+0.250 write(4, ..., 1000) = 1000
+0.250 > P. 1:1001(1000) ack 1001
+
+// ACK
+0.300 < . 1001:1001(0) ack 1001 win 257
+
+0.400 read(4, ..., 1000) = 1000
+
+// Client closes the connection
+0.610 < F. 1001:1001(0) ack 1001 win 260
+
+// Respond with (delayed) ACK
+0.650 > . 1001:1001(0) ack 1002
+
+// We close the connection
+0.700 close(4) = 0
+0.701 > F. 1001:1001(0) ack 1002
