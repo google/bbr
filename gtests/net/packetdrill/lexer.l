@@ -134,7 +134,7 @@ code		\%\{(([^}])|(\}[^\%]))*\}\%
 /* A regular experssion for an IP address
  * TODO(ncardwell): IPv6
  */
-ip_addr		[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+
+ipv4_addr		[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+
 
 %%
 sa_family		return SA_FAMILY;
@@ -149,8 +149,10 @@ revents			return REVENTS;
 onoff			return ONOFF;
 linger			return LINGER;
 htons			return _HTONS_;
+ipv4			return IPV4;
 icmp			return ICMP;
 udp			return UDP;
+gre			return GRE;
 inet_addr		return INET_ADDR;
 ack			return ACK;
 eol			return EOL;
@@ -183,5 +185,5 @@ ce			return CE;
 {cpp_comment}		/* ignore C++-style comment */;
 {c_comment}		/* ignore C-style comment */;
 {code}			yylval.string = code(yytext);   return CODE;
-{ip_addr}		yylval.string = strdup(yytext); return IP_ADDR;
+{ipv4_addr}		yylval.string = strdup(yytext); return IPV4_ADDR;
 %%

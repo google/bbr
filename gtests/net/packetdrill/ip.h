@@ -89,6 +89,11 @@ static inline u8 ipv4_ecn_bits(const struct ipv4 *ipv4)
 	return ipv4->tos & IP_ECN_MASK;
 }
 
+static inline int ipv4_header_len(const struct ipv4 *ipv4)
+{
+	return ipv4->ihl * sizeof(u32);
+}
+
 /* IP fragmentation bit flags */
 #define IP_RF		0x8000	/* reserved fragment flag */
 #define IP_DF		0x4000	/* don't fragment flag */

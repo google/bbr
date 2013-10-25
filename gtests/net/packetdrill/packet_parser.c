@@ -37,6 +37,7 @@
 
 #include "checksum.h"
 #include "ethernet.h"
+#include "gre.h"
 #include "ip.h"
 #include "ip_address.h"
 #include "logging.h"
@@ -47,9 +48,12 @@ static int parse_ipv4(struct packet *packet, u8 *header_start, u8 *packet_end,
 		      char **error);
 static int parse_ipv6(struct packet *packet, u8 *header_start, u8 *packet_end,
 		      char **error);
+static int parse_layer3_packet_by_proto(struct packet *packet,
+					u16 proto, u8 *header_start,
+					u8 *packet_end, char **error);
 static int parse_layer4(struct packet *packet, u8 *header_start,
 			int layer4_protocol, int layer4_bytes,
-			u8 *packet_end, char **error);
+			u8 *packet_end, bool *is_inner, char **error);
 
 static int parse_layer2_packet(struct packet *packet, int in_bytes,
 				       char **error)
@@ -67,7 +71,20 @@ static int parse_layer2_packet(struct packet *packet, int in_bytes,
 	ether = (struct ether_header *)p;
 	p += sizeof(*ether);
 
-	if (ntohs(ether->ether_type) == ETHERTYPE_IP) {
+	return parse_layer3_packet_by_proto(packet, ntohs(ether->ether_type),
+					    p, packet_end, error);
+
+error_out:
+	return PACKET_BAD;
+}
+
+static int parse_layer3_packet_by_proto(struct packet *packet,
+					u16 proto, u8 *header_start,
+					u8 *packet_end, char **error)
+{
+	u8 *p = header_start;
+
+	if (proto == ETHERTYPE_IP) {
 		struct ipv4 *ip = NULL;
 
 		/* Examine IPv4 header. */
@@ -86,7 +103,7 @@ static int parse_layer2_packet(struct packet *packet, int in_bytes,
 			asprintf(error, "Bad IP version for ETHERTYPE_IP");
 			goto error_out;
 		}
-	} else if (ntohs(ether->ether_type) == ETHERTYPE_IPV6) {
+	} else if (proto == ETHERTYPE_IPV6) {
 		struct ipv6 *ip = NULL;
 
 		/* Examine IPv6 header. */
@@ -146,7 +163,7 @@ int parse_packet(struct packet *packet, int in_bytes,
 	assert(in_bytes <= packet->buffer_bytes);
 	char *message = NULL;		/* human-readable error summary */
 	char *hex = NULL;		/* hex dump of bad packet */
-	enum packet_parse_result_t result;
+	enum packet_parse_result_t result = PACKET_BAD;
 
 	if (layer == PACKET_LAYER_2_ETHERNET)
 		result = parse_layer2_packet(packet, in_bytes, error);
@@ -175,13 +192,16 @@ int parse_packet(struct packet *packet, int in_bytes,
 static int parse_ipv4(struct packet *packet, u8 *header_start, u8 *packet_end,
 		      char **error)
 {
+	struct header *ip_header = NULL;
 	u8 *p = header_start;
+	const bool is_outer = (packet->ip_bytes == 0);
+	bool is_inner = false;
+	enum packet_parse_result_t result = PACKET_BAD;
+	struct ipv4 *ipv4 = (struct ipv4 *) (p);
 
-	packet->ipv4 = (struct ipv4 *) (p);
-
-	const int ip_header_bytes = packet_ip_header_len(packet);
+	const int ip_header_bytes = ipv4_header_len(ipv4);
 	assert(ip_header_bytes >= 0);
-	if (ip_header_bytes < sizeof(*packet->ipv4)) {
+	if (ip_header_bytes < sizeof(*ipv4)) {
 		asprintf(error, "IP header too short");
 		goto error_out;
 	}
@@ -189,8 +209,8 @@ static int parse_ipv4(struct packet *packet, u8 *header_start, u8 *packet_end,
 		asprintf(error, "Full IP header overflows packet");
 		goto error_out;
 	}
-	const int ip_total_bytes = ntohs(packet->ipv4->tot_len);
-	packet->ip_bytes = ip_total_bytes;
+	const int ip_total_bytes = ntohs(ipv4->tot_len);
+
 	if (p + ip_total_bytes > packet_end) {
 		asprintf(error, "IP payload overflows packet");
 		goto error_out;
@@ -199,19 +219,26 @@ static int parse_ipv4(struct packet *packet, u8 *header_start, u8 *packet_end,
 		asprintf(error, "IP header bigger than datagram");
 		goto error_out;
 	}
-	if (ntohs(packet->ipv4->frag_off) & IP_MF) {	/* more fragments? */
+	if (ntohs(ipv4->frag_off) & IP_MF) {	/* more fragments? */
 		asprintf(error, "More fragments remaining");
 		goto error_out;
 	}
-	if (ntohs(packet->ipv4->frag_off) & IP_OFFMASK) {  /* fragment offset */
+	if (ntohs(ipv4->frag_off) & IP_OFFMASK) {  /* fragment offset */
 		asprintf(error, "Non-zero fragment offset");
 		goto error_out;
 	}
-	const u16 checksum = ipv4_checksum(packet->ipv4, ip_header_bytes);
+	const u16 checksum = ipv4_checksum(ipv4, ip_header_bytes);
 	if (checksum != 0) {
 		asprintf(error, "Bad IP checksum");
 		goto error_out;
 	}
+
+	ip_header = packet_append_header(packet, HEADER_IPV4, ip_header_bytes);
+	if (ip_header == NULL) {
+		asprintf(error, "Too many nested headers at IPv4 header");
+		goto error_out;
+	}
+	ip_header->total_bytes = ip_total_bytes;
 
 	/* Move on to the header inside. */
 	p += ip_header_bytes;
@@ -221,17 +248,26 @@ static int parse_ipv4(struct packet *packet, u8 *header_start, u8 *packet_end,
 		char src_string[ADDR_STR_LEN];
 		char dst_string[ADDR_STR_LEN];
 		struct ip_address src_ip, dst_ip;
-		ip_from_ipv4(&packet->ipv4->src_ip, &src_ip);
-		ip_from_ipv4(&packet->ipv4->dst_ip, &dst_ip);
+		ip_from_ipv4(&ipv4->src_ip, &src_ip);
+		ip_from_ipv4(&ipv4->dst_ip, &dst_ip);
 		DEBUGP("src IP: %s\n", ip_to_string(&src_ip, src_string));
 		DEBUGP("dst IP: %s\n", ip_to_string(&dst_ip, dst_string));
 	}
 
 	/* Examine the L4 header. */
 	const int layer4_bytes = ip_total_bytes - ip_header_bytes;
-	const int layer4_protocol = packet->ipv4->protocol;
-	return parse_layer4(packet, p, layer4_protocol, layer4_bytes,
-			    packet_end, error);
+	const int layer4_protocol = ipv4->protocol;
+	result = parse_layer4(packet, p, layer4_protocol, layer4_bytes,
+			      packet_end, &is_inner, error);
+
+	/* If this is the innermost IP header then this is the primary. */
+	if (is_inner)
+		packet->ipv4 = ipv4;
+	/* If this is the outermost IP header then this is the packet length. */
+	if (is_outer)
+		packet->ip_bytes = ip_total_bytes;
+
+	return result;
 
 error_out:
 	return PACKET_BAD;
@@ -245,14 +281,15 @@ error_out:
 static int parse_ipv6(struct packet *packet, u8 *header_start, u8 *packet_end,
 		      char **error)
 {
+	struct header *ip_header = NULL;
 	u8 *p = header_start;
-
-	packet->ipv6 = (struct ipv6 *) (p);
+	const bool is_outer = (packet->ip_bytes == 0);
+	bool is_inner = false;
+	struct ipv6 *ipv6 = (struct ipv6 *) (p);
+	enum packet_parse_result_t result = PACKET_BAD;
 
 	/* Check that header fits in sniffed packet. */
-	const int ip_header_bytes = packet_ip_header_len(packet);
-	assert(ip_header_bytes >= 0);
-	assert(ip_header_bytes == sizeof(*packet->ipv6));
+	const int ip_header_bytes = sizeof(*ipv6);
 	if (p + ip_header_bytes > packet_end) {
 		asprintf(error, "IPv6 header overflows packet");
 		goto error_out;
@@ -260,13 +297,20 @@ static int parse_ipv6(struct packet *packet, u8 *header_start, u8 *packet_end,
 
 	/* Check that payload fits in sniffed packet. */
 	const int ip_total_bytes = (ip_header_bytes +
-				    ntohs(packet->ipv6->payload_len));
-	packet->ip_bytes = ip_total_bytes;
+				    ntohs(ipv6->payload_len));
+
 	if (p + ip_total_bytes > packet_end) {
 		asprintf(error, "IPv6 payload overflows packet");
 		goto error_out;
 	}
 	assert(ip_header_bytes <= ip_total_bytes);
+
+	ip_header = packet_append_header(packet, HEADER_IPV6, ip_header_bytes);
+	if (ip_header == NULL) {
+		asprintf(error, "Too many nested headers at IPv6 header");
+		goto error_out;
+	}
+	ip_header->total_bytes = ip_total_bytes;
 
 	/* Move on to the header inside. */
 	p += ip_header_bytes;
@@ -276,17 +320,26 @@ static int parse_ipv6(struct packet *packet, u8 *header_start, u8 *packet_end,
 		char src_string[ADDR_STR_LEN];
 		char dst_string[ADDR_STR_LEN];
 		struct ip_address src_ip, dst_ip;
-		ip_from_ipv6(&packet->ipv6->src_ip, &src_ip);
-		ip_from_ipv6(&packet->ipv6->dst_ip, &dst_ip);
+		ip_from_ipv6(&ipv6->src_ip, &src_ip);
+		ip_from_ipv6(&ipv6->dst_ip, &dst_ip);
 		DEBUGP("src IP: %s\n", ip_to_string(&src_ip, src_string));
 		DEBUGP("dst IP: %s\n", ip_to_string(&dst_ip, dst_string));
 	}
 
 	/* Examine the L4 header. */
 	const int layer4_bytes = ip_total_bytes - ip_header_bytes;
-	const int layer4_protocol = packet->ipv6->next_header;
-	return parse_layer4(packet, p, layer4_protocol, layer4_bytes,
-			    packet_end, error);
+	const int layer4_protocol = ipv6->next_header;
+	result = parse_layer4(packet, p, layer4_protocol, layer4_bytes,
+			      packet_end, &is_inner, error);
+
+	/* If this is the innermost IP header then this is the primary. */
+	if (is_inner)
+		packet->ipv6 = ipv6;
+	/* If this is the outermost IP header then this is the packet length. */
+	if (is_outer)
+		packet->ip_bytes = ip_total_bytes;
+
+	return result;
 
 error_out:
 	return PACKET_BAD;
@@ -296,6 +349,7 @@ error_out:
 static int parse_tcp(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 		     u8 *packet_end, char **error)
 {
+	struct header *tcp_header = NULL;
 	u8 *p = layer4_start;
 
 	assert(layer4_bytes >= 0);
@@ -314,6 +368,13 @@ static int parse_tcp(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 		goto error_out;
 	}
 
+	tcp_header = packet_append_header(packet, HEADER_TCP, tcp_header_len);
+	if (tcp_header == NULL) {
+		asprintf(error, "Too many nested headers at TCP header");
+		goto error_out;
+	}
+	tcp_header->total_bytes = layer4_bytes;
+
 	p += layer4_bytes;
 	assert(p <= packet_end);
 
@@ -329,6 +390,7 @@ error_out:
 static int parse_udp(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 		     u8 *packet_end, char **error)
 {
+	struct header *udp_header = NULL;
 	u8 *p = layer4_start;
 
 	assert(layer4_bytes >= 0);
@@ -338,7 +400,8 @@ static int parse_udp(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 	}
 	packet->udp = (struct udp *) p;
 	const int udp_len = ntohs(packet->udp->len);
-	if (udp_len < sizeof(struct udp)) {
+	const int udp_header_len = sizeof(struct udp);
+	if (udp_len < udp_header_len) {
 		asprintf(error, "UDP datagram length too small for UDP header");
 		goto error_out;
 	}
@@ -350,6 +413,13 @@ static int parse_udp(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 		asprintf(error, "UDP datagram length too big");
 		goto error_out;
 	}
+
+	udp_header = packet_append_header(packet, HEADER_UDP, udp_header_len);
+	if (udp_header == NULL) {
+		asprintf(error, "Too many nested headers at UDP header");
+		goto error_out;
+	}
+	udp_header->total_bytes = layer4_bytes;
 
 	p += layer4_bytes;
 	assert(p <= packet_end);
@@ -364,13 +434,22 @@ error_out:
 
 static int parse_layer4(struct packet *packet, u8 *layer4_start,
 			int layer4_protocol, int layer4_bytes,
-			u8 *packet_end, char **error)
+			u8 *packet_end, bool *is_inner, char **error)
 {
-	if (layer4_protocol == IPPROTO_TCP)
+	if (layer4_protocol == IPPROTO_TCP) {
+		*is_inner = true;	/* found inner-most layer 4 */
 		return parse_tcp(packet, layer4_start, layer4_bytes, packet_end,
 				 error);
-	else if (layer4_protocol == IPPROTO_UDP)
+	} else if (layer4_protocol == IPPROTO_UDP) {
+		*is_inner = true;	/* found inner-most layer 4 */
 		return parse_udp(packet, layer4_start, layer4_bytes, packet_end,
 				 error);
+	} else if (layer4_protocol == IPPROTO_IPIP) {
+		*is_inner = false;
+		return parse_ipv4(packet, layer4_start, packet_end, error);
+	} else if (layer4_protocol == IPPROTO_IPV6) {
+		*is_inner = false;
+		return parse_ipv6(packet, layer4_start, packet_end, error);
+	}
 	return PACKET_UNKNOWN_L4;
 }

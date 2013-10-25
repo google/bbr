@@ -37,11 +37,11 @@ static void checksum_ipv4_packet(struct packet *packet)
 
 	/* Fill in IPv4 header checksum. */
 	ipv4->check = 0;
-	ipv4->check = ipv4_checksum(ipv4, packet_ip_header_len(packet));
-	assert(packet->ip_bytes == ntohs(ipv4->tot_len));
+	ipv4->check = ipv4_checksum(ipv4, ipv4_header_len(ipv4));
+	assert(packet->ip_bytes >= ntohs(ipv4->tot_len));
 
 	/* Find the length of layer 4 header, options, and payload. */
-	const int l4_bytes = packet->ip_bytes - packet_ip_header_len(packet);
+	const int l4_bytes = ntohs(ipv4->tot_len) - ipv4_header_len(ipv4);
 	assert(l4_bytes > 0);
 
 	/* Fill in IPv4-based layer 4 checksum. */
@@ -72,10 +72,10 @@ static void checksum_ipv6_packet(struct packet *packet)
 
 	/* IPv6 has no header checksum. */
 	/* For now we do not support IPv6 extension headers. */
-	assert(packet->ip_bytes == sizeof(*ipv6) + ntohs(ipv6->payload_len));
+	assert(packet->ip_bytes >= sizeof(*ipv6) + ntohs(ipv6->payload_len));
 
 	/* Find the length of layer 4 header, options, and payload. */
-	const int l4_bytes = packet->ip_bytes - packet_ip_header_len(packet);
+	const int l4_bytes = ntohs(ipv6->payload_len);
 	assert(l4_bytes > 0);
 
 	/* Fill in IPv6-based layer 4 checksum. */

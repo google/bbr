@@ -616,7 +616,7 @@ static int verify_outbound_live_checksums(struct packet *live_packet,
 	/* Verify IP header checksum. */
 	if ((live_packet->ipv4 != NULL) &&
 	    ipv4_checksum(live_packet->ipv4,
-			  packet_ip_header_len(live_packet))) {
+			  ipv4_header_len(live_packet->ipv4))) {
 		asprintf(error, "bad outbound IP checksum");
 		return STATUS_ERR;
 	}

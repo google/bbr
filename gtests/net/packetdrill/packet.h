@@ -30,6 +30,8 @@
 
 #include <assert.h>
 #include <sys/time.h>
+#include "gre.h"
+#include "header.h"
 #include "icmp.h"
 #include "icmpv6.h"
 #include "ip.h"
@@ -52,6 +54,12 @@
  */
 static const int PACKET_READ_BYTES = 64 * 1024;
 
+/* Maximum number of headers. */
+#define PACKET_MAX_HEADERS	6
+
+/* Maximum number of bytes of headers. */
+#define PACKET_MAX_HEADER_BYTES	256
+
 /* TCP/UDP/IPv4 packet, including IPv4 header, TCP/UDP header, and data. There
  * may also be a link layer header between the 'buffer' and 'ip'
  * pointers, but we typically ignore that. The 'buffer_bytes' field
@@ -61,12 +69,20 @@ static const int PACKET_READ_BYTES = 64 * 1024;
 struct packet {
 	u8 *buffer;		/* data buffer: full contents of packet */
 	u32 buffer_bytes;	/* bytes of space in data buffer */
-	u32 ip_bytes;		/* bytes on wire: IP, TCP/UDP header, payload */
+	u32 ip_bytes;		/* bytes on wire: outermost IP hdrs/payload */
 	enum direction_t direction;	/* direction packet is traveling */
 
-	/* The following pointers point into the 'buffer' area.
-	 * Each pointer may be NULL if there is no header of that
-	 * type present in the packet.
+	/* Metadata about all the headers in the packet, including all
+	 * layers of encapsulation, from outer to inner, starting from
+	 * the outermost IP header at headers[0].
+	 */
+	struct header headers[PACKET_MAX_HEADERS];
+
+	/* The following pointers point into the 'buffer' area. Each
+	 * pointer may be NULL if there is no header of that type
+	 * present in the packet. In each case these are pointers to
+	 * the innermost header of that kind, since that is where most
+	 * of the interesting TCP/UDP/IP action is.
 	 */
 
 	/* Layer 3 */
@@ -100,6 +116,33 @@ extern void packet_free(struct packet *packet);
 /* Create a packet that is a copy of the contents of the given packet. */
 extern struct packet *packet_copy(struct packet *old_packet);
 
+/* Return the number of headers in the given packet. */
+extern int packet_header_count(const struct packet *packet);
+
+/* Attempt to append a new header to the given packet. Return a
+ * pointer to the new header metadata, or NULL if we can't add the
+ * header.
+ */
+extern struct header *packet_append_header(struct packet *packet,
+					   enum header_t header_type,
+					   int header_bytes);
+
+/* Return a newly-allocated packet that is a copy of the given inner packet
+ * but with the given outer packet prepended.
+ */
+extern struct packet *packet_encapsulate(struct packet *outer,
+					 struct packet *inner);
+
+/* Encapsulate a packet and free the original outer and inner packets. */
+static inline struct packet *packet_encapsulate_and_free(struct packet *outer,
+							 struct packet *inner)
+{
+	struct packet *packet = packet_encapsulate(outer, inner);
+	packet_free(outer);
+	packet_free(inner);
+	return packet;
+}
+
 /* Return the direction in which the given packet is traveling. */
 static inline enum direction_t packet_direction(const struct packet *packet)
 {
@@ -118,8 +161,16 @@ static inline int packet_address_family(const struct packet *packet)
 	return AF_UNSPEC;
 }
 
-/* Return a pointer to the first byte of the IP header. */
+/* Return a pointer to the first byte of the outermost IP header. */
 static inline u8 *packet_start(struct packet *packet)
+{
+	u8 *start = packet->headers[0].h.ptr;
+	assert(start != NULL);
+	return start;
+}
+
+/* Return a pointer to the first byte of the innermost IP header. */
+static inline u8 *ip_start(struct packet *packet)
 {
 	if (packet->ipv4 != NULL)
 		return (u8 *)packet->ipv4;
@@ -133,7 +184,7 @@ static inline u8 *packet_start(struct packet *packet)
 /* Return the length in bytes of the IP header for packets of the
  * given address family, assuming no IP options.
  */
-static inline int ip_header_len(int address_family)
+static inline int ip_header_min_len(int address_family)
 {
 	if (address_family == AF_INET)
 		return sizeof(struct ipv4);
@@ -141,17 +192,6 @@ static inline int ip_header_len(int address_family)
 		return sizeof(struct ipv6);
 	else
 		assert(!"bad ip_version in config");
-}
-
-/* Return the length of the IP header (includes options for IPv4 case). */
-static inline int packet_ip_header_len(struct packet *packet)
-{
-	if (packet->ipv4 != NULL)
-		return packet->ipv4->ihl * sizeof(u32);
-	if (packet->ipv6 != NULL)
-		return sizeof(*packet->ipv6);
-	assert(!"bad address family");
-	return 0;
 }
 
 /* Return the layer4 protocol of the packet. */

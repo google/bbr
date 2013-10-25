@@ -33,9 +33,10 @@ struct packet *new_udp_packet(int address_family,
 			       char **error)
 {
 	struct packet *packet = NULL;  /* the newly-allocated result packet */
+	struct header *udp_header = NULL;  /* the UDP header info */
 	/* Calculate lengths in bytes of all sections of the packet */
 	const int ip_option_bytes = 0;
-	const int ip_header_bytes = (ip_header_len(address_family) +
+	const int ip_header_bytes = (ip_header_min_len(address_family) +
 				     ip_option_bytes);
 	const int udp_header_bytes = sizeof(struct udp);
 	const int ip_bytes =
@@ -59,18 +60,21 @@ struct packet *new_udp_packet(int address_family,
 	/* Allocate and zero out a packet object of the desired size */
 	packet = packet_new(ip_bytes);
 	memset(packet->buffer, 0, ip_bytes);
-	packet->ip_bytes = ip_bytes;
 
 	packet->direction = direction;
 	packet->flags = 0;
 	packet->ecn = ECN_NONE;
 
 	/* Set IP header fields */
-	set_packet_ip_header(packet, address_family, ip_bytes, direction,
+	set_packet_ip_header(packet, address_family, ip_bytes,
 			     packet->ecn, IPPROTO_UDP);
 
+	udp_header = packet_append_header(packet, HEADER_UDP,
+					  sizeof(struct udp));
+	udp_header->total_bytes = udp_header_bytes + udp_payload_bytes;
+
 	/* Find the start of UDP section of the packet */
-	packet->udp = (struct udp *) (packet_start(packet) + ip_header_bytes);
+	packet->udp = (struct udp *) (ip_start(packet) + ip_header_bytes);
 
 	/* Set UDP header fields */
 	packet->udp->src_port	= htons(0);
@@ -78,5 +82,6 @@ struct packet *new_udp_packet(int address_family,
 	packet->udp->len	= htons(udp_header_bytes + udp_payload_bytes);
 	packet->udp->check	= 0;
 
+	packet->ip_bytes = ip_bytes;
 	return packet;
 }

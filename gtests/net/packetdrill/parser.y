@@ -90,7 +90,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "gre_packet.h"
 #include "ip.h"
+#include "ip_packet.h"
 #include "icmp_packet.h"
 #include "logging.h"
 #include "tcp_packet.h"
@@ -471,11 +473,11 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 %token <reserved> ACK ECR EOL MSS NOP SACK SACKOK TIMESTAMP VAL WIN WSCALE PRO
 %token <reserved> FAST_OPEN
 %token <reserved> ECT0 ECT1 CE ECT01 NO_ECN
-%token <reserved> ICMP UDP MTU
+%token <reserved> IPV4 ICMP UDP GRE MTU
 %token <reserved> OPTION
 %token <floating> FLOAT
 %token <integer> INTEGER HEX_INTEGER
-%token <string> WORD STRING BACK_QUOTED CODE IP_ADDR
+%token <string> WORD STRING BACK_QUOTED CODE IPV4_ADDR
 %type <direction> direction
 %type <ip_ecn> opt_ip_info
 %type <ip_ecn> ip_ecn
@@ -483,6 +485,7 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 %type <event> event events event_time action
 %type <time_usecs> time opt_end_time
 %type <packet> packet_spec tcp_packet_spec udp_packet_spec icmp_packet_spec
+%type <packet> packet_prefix
 %type <syscall> syscall_spec
 %type <command> command_spec
 %type <code> code_spec
@@ -546,7 +549,8 @@ option_value
 : INTEGER	{ $$ = strdup(yytext); }
 | WORD		{ $$ = $1; }
 | STRING	{ $$ = $1; }
-| IP_ADDR	{ $$ = $1; }
+| IPV4_ADDR	{ $$ = $1; }
+| IPV4		{ $$ = strdup("ipv4"); }
 ;
 
 opt_init_command
@@ -662,58 +666,97 @@ packet_spec
 ;
 
 tcp_packet_spec
-: direction opt_ip_info flags seq opt_ack opt_window opt_tcp_options {
+: packet_prefix opt_ip_info flags seq opt_ack opt_window opt_tcp_options {
 	char *error = NULL;
+	struct packet *outer = $1, *inner = NULL;
+	enum direction_t direction = outer->direction;
 
-	if (($7 == NULL) && ($1 != DIRECTION_OUTBOUND)) {
+	if (($7 == NULL) && (direction != DIRECTION_OUTBOUND)) {
 		yylineno = @7.first_line;
 		semantic_error("<...> for TCP options can only be used with "
 			       "outbound packets");
 	}
 
-	$$ = new_tcp_packet(in_config->wire_protocol,
-			    $1, $2, $3, $4.start_sequence, $4.payload_bytes,
-	                    $5, $6, $7, &error);
+	inner = new_tcp_packet(in_config->wire_protocol,
+			       direction, $2, $3,
+			       $4.start_sequence, $4.payload_bytes,
+			       $5, $6, $7, &error);
 	free($3);
 	free($7);
-	if ($$ == NULL) {
+	if (inner == NULL) {
 		assert(error != NULL);
 		semantic_error(error);
 		free(error);
 	}
+
+	$$ = packet_encapsulate_and_free(outer, inner);
 }
 ;
 
 udp_packet_spec
-: direction UDP '(' INTEGER ')' {
+: packet_prefix UDP '(' INTEGER ')' {
 	char *error = NULL;
+	struct packet *outer = $1, *inner = NULL;
+	enum direction_t direction = outer->direction;
+
 	if (!is_valid_u16($4)) {
 		semantic_error("UDP payload size out of range");
 	}
 
-	$$ = new_udp_packet(in_config->wire_protocol, $1, $4, &error);
-	if ($$ == NULL) {
+	inner = new_udp_packet(in_config->wire_protocol, direction, $4, &error);
+	if (inner == NULL) {
 		assert(error != NULL);
 		semantic_error(error);
 		free(error);
 	}
+
+	$$ = packet_encapsulate_and_free(outer, inner);
 }
 ;
 
-////////////////////
 icmp_packet_spec
-: direction opt_icmp_echoed ICMP icmp_type opt_icmp_code opt_icmp_mtu {
+: packet_prefix opt_icmp_echoed ICMP icmp_type opt_icmp_code opt_icmp_mtu {
 	char *error = NULL;
-	$$ = new_icmp_packet(in_config->wire_protocol,
-			     $1, $4, $5,
-			     $2.protocol, $2.start_sequence, $2.payload_bytes,
-			     $6, &error);
+	struct packet *outer = $1, *inner = NULL;
+	enum direction_t direction = outer->direction;
+
+	inner = new_icmp_packet(in_config->wire_protocol, direction, $4, $5,
+				$2.protocol, $2.start_sequence,
+				$2.payload_bytes, $6, &error);
 	free($4);
 	free($5);
-	if ($$ == NULL) {
+	if (inner == NULL) {
 		semantic_error(error);
 		free(error);
 	}
+
+	$$ = packet_encapsulate_and_free(outer, inner);
+}
+;
+
+
+packet_prefix
+: direction {
+	$$ = packet_new(PACKET_MAX_HEADER_BYTES);
+	$$->direction = $1;
+}
+| packet_prefix IPV4 IPV4_ADDR '>' IPV4_ADDR ':' {
+	char *error = NULL;
+	struct packet *packet = $1;
+	char *ip_src = $3;
+	char *ip_dst = $5;
+	if (ipv4_header_append(packet, ip_src, ip_dst, &error))
+		semantic_error(error);
+	free(ip_src);
+	free(ip_dst);
+	$$ = packet;
+}
+| packet_prefix GRE ':' {
+	char *error = NULL;
+	struct packet *packet = $1;
+	if (gre_header_append(packet, &error))
+		semantic_error(error);
+	$$ = packet;
 }
 ;
 

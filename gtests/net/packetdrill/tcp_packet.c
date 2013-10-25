@@ -62,10 +62,11 @@ struct packet *new_tcp_packet(int address_family,
 			       char **error)
 {
 	struct packet *packet = NULL;  /* the newly-allocated result packet */
+	struct header *tcp_header = NULL;  /* the TCP header info */
 	/* Calculate lengths in bytes of all sections of the packet */
 	const int ip_option_bytes = 0;
 	const int tcp_option_bytes = tcp_options ? tcp_options->length : 0;
-	const int ip_header_bytes = (ip_header_len(address_family) +
+	const int ip_header_bytes = (ip_header_min_len(address_family) +
 				     ip_option_bytes);
 	const int tcp_header_bytes = sizeof(struct tcp) + tcp_option_bytes;
 	const int ip_bytes =
@@ -104,18 +105,20 @@ struct packet *new_tcp_packet(int address_family,
 	/* Allocate and zero out a packet object of the desired size */
 	packet = packet_new(ip_bytes);
 	memset(packet->buffer, 0, ip_bytes);
-	packet->ip_bytes = ip_bytes;
 
 	packet->direction = direction;
 	packet->flags = 0;
 	packet->ecn = ecn;
 
 	/* Set IP header fields */
-	set_packet_ip_header(packet, address_family, ip_bytes, direction, ecn,
+	set_packet_ip_header(packet, address_family, ip_bytes, ecn,
 			     IPPROTO_TCP);
 
+	tcp_header = packet_append_header(packet, HEADER_TCP, tcp_header_bytes);
+	tcp_header->total_bytes = tcp_header_bytes + tcp_payload_bytes;
+
 	/* Find the start of TCP sections of the packet */
-	packet->tcp = (struct tcp *) (packet_start(packet) + ip_header_bytes);
+	packet->tcp = (struct tcp *) (ip_start(packet) + ip_header_bytes);
 	u8 *tcp_option_start = (u8 *) (packet->tcp + 1);
 
 	/* Set TCP header fields */
@@ -154,5 +157,6 @@ struct packet *new_tcp_packet(int address_family,
 		       tcp_options->length);
 	}
 
+	packet->ip_bytes = ip_bytes;
 	return packet;
 }
