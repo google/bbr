@@ -31,8 +31,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "checksum.h"
+#include "gre.h"
 #include "logging.h"
 #include "netdev.h"
+#include "packet.h"
 #include "packet_checksum.h"
 #include "packet_to_string.h"
 #include "run.h"
@@ -685,32 +687,33 @@ static int tcp_options_allowance(const struct packet *actual_packet,
 }
 
 /* Verify that required actual IPv4 header fields are as the script expected. */
-static int verify_outbound_live_ipv4(
+static int verify_ipv4(
 	const struct packet *actual_packet,
-	const struct packet *script_packet, char **error)
+	const struct packet *script_packet,
+	int layer, char **error)
 {
-	if (actual_packet->ipv4 == NULL)
-		return STATUS_OK;
+	const struct ipv4 *actual_ipv4 = actual_packet->headers[layer].h.ipv4;
+	const struct ipv4 *script_ipv4 = script_packet->headers[layer].h.ipv4;
 
 	if (check_field("ipv4_version",
-			script_packet->ipv4->version,
-			actual_packet->ipv4->version, error) ||
+			script_ipv4->version,
+			actual_ipv4->version, error) ||
 	    check_field("ipv4_protocol",
-			script_packet->ipv4->protocol,
-			actual_packet->ipv4->protocol, error) ||
+			script_ipv4->protocol,
+			actual_ipv4->protocol, error) ||
 	    check_field("ipv4_header_length",
-			script_packet->ipv4->ihl,
-			actual_packet->ipv4->ihl, error) ||
+			script_ipv4->ihl,
+			actual_ipv4->ihl, error) ||
 	    check_field("ipv4_total_length",
-			(ntohs(script_packet->ipv4->tot_len) +
+			(ntohs(script_ipv4->tot_len) +
 			 tcp_options_allowance(actual_packet,
 					       script_packet)),
-			ntohs(actual_packet->ipv4->tot_len), error))
+			ntohs(actual_ipv4->tot_len), error))
 		return STATUS_ERR;
 
 	if (verify_outbound_live_ecn(script_packet->ecn,
-				     ipv4_ecn_bits(actual_packet->ipv4),
-				     ipv4_ecn_bits(script_packet->ipv4),
+				     ipv4_ecn_bits(actual_ipv4),
+				     ipv4_ecn_bits(script_ipv4),
 				     error))
 		return STATUS_ERR;
 
@@ -718,29 +721,30 @@ static int verify_outbound_live_ipv4(
 }
 
 /* Verify that required actual IPv6 header fields are as the script expected. */
-static int verify_outbound_live_ipv6(
+static int verify_ipv6(
 	const struct packet *actual_packet,
-	const struct packet *script_packet, char **error)
+	const struct packet *script_packet,
+	int layer, char **error)
 {
-	if (actual_packet->ipv6 == NULL)
-		return STATUS_OK;
+	const struct ipv6 *actual_ipv6 = actual_packet->headers[layer].h.ipv6;
+	const struct ipv6 *script_ipv6 = script_packet->headers[layer].h.ipv6;
 
 	if (check_field("ipv6_version",
-			script_packet->ipv6->version,
-			actual_packet->ipv6->version, error) ||
+			script_ipv6->version,
+			actual_ipv6->version, error) ||
 	    check_field("ipv6_payload_len",
-			(ntohs(script_packet->ipv6->payload_len) +
+			(ntohs(script_ipv6->payload_len) +
 			 tcp_options_allowance(actual_packet,
 					       script_packet)),
-			ntohs(actual_packet->ipv6->payload_len), error) ||
+			ntohs(actual_ipv6->payload_len), error) ||
 	    check_field("ipv6_next_header",
-			script_packet->ipv6->next_header,
-			actual_packet->ipv6->next_header, error))
+			script_ipv6->next_header,
+			actual_ipv6->next_header, error))
 		return STATUS_ERR;
 
 	if (verify_outbound_live_ecn(script_packet->ecn,
-				     ipv6_ecn_bits(actual_packet->ipv6),
-				     ipv6_ecn_bits(script_packet->ipv6),
+				     ipv6_ecn_bits(actual_ipv6),
+				     ipv6_ecn_bits(script_ipv6),
 				     error))
 		return STATUS_ERR;
 
@@ -748,74 +752,134 @@ static int verify_outbound_live_ipv6(
 }
 
 /* Verify that required actual TCP header fields are as the script expected. */
-static int verify_outbound_live_tcp(
+static int verify_tcp(
 	const struct packet *actual_packet,
-	const struct packet *script_packet, char **error)
+	const struct packet *script_packet,
+	int layer, char **error)
 {
-	assert(actual_packet->tcp != NULL);
+	const struct tcp *actual_tcp = actual_packet->headers[layer].h.tcp;
+	const struct tcp *script_tcp = script_packet->headers[layer].h.tcp;
 
 	if (check_field("tcp_data_offset",
-			(script_packet->tcp->doff +
+			(script_tcp->doff +
 			 tcp_options_allowance(actual_packet,
 					       script_packet)/sizeof(u32)),
-			actual_packet->tcp->doff, error) ||
+			actual_tcp->doff, error) ||
 	    check_field("tcp_fin",
-			script_packet->tcp->fin,
-			actual_packet->tcp->fin, error) ||
+			script_tcp->fin,
+			actual_tcp->fin, error) ||
 	    check_field("tcp_syn",
-			script_packet->tcp->syn,
-			actual_packet->tcp->syn, error) ||
+			script_tcp->syn,
+			actual_tcp->syn, error) ||
 	    check_field("tcp_rst",
-			script_packet->tcp->rst,
-			actual_packet->tcp->rst, error) ||
+			script_tcp->rst,
+			actual_tcp->rst, error) ||
 	    check_field("tcp_psh",
-			script_packet->tcp->psh,
-			actual_packet->tcp->psh, error) ||
+			script_tcp->psh,
+			actual_tcp->psh, error) ||
 	    check_field("tcp_ack",
-			script_packet->tcp->ack,
-			actual_packet->tcp->ack, error) ||
+			script_tcp->ack,
+			actual_tcp->ack, error) ||
 	    check_field("tcp_urg",
-			script_packet->tcp->urg,
-			actual_packet->tcp->urg, error) ||
+			script_tcp->urg,
+			actual_tcp->urg, error) ||
 	    check_field("tcp_ece",
-			script_packet->tcp->ece,
-			actual_packet->tcp->ece, error) ||
+			script_tcp->ece,
+			actual_tcp->ece, error) ||
 	    check_field("tcp_cwr",
-			script_packet->tcp->cwr,
-			actual_packet->tcp->cwr, error) ||
+			script_tcp->cwr,
+			actual_tcp->cwr, error) ||
 	    check_field("tcp_reserved_bits",
-			script_packet->tcp->res1,
-			actual_packet->tcp->res1, error) ||
+			script_tcp->res1,
+			actual_tcp->res1, error) ||
 	    check_field("tcp_seq",
-			ntohl(script_packet->tcp->seq),
-			ntohl(actual_packet->tcp->seq), error) ||
+			ntohl(script_tcp->seq),
+			ntohl(actual_tcp->seq), error) ||
 	    check_field("tcp_ack_seq",
-			ntohl(script_packet->tcp->ack_seq),
-			ntohl(actual_packet->tcp->ack_seq), error) ||
+			ntohl(script_tcp->ack_seq),
+			ntohl(actual_tcp->ack_seq), error) ||
 	    (script_packet->flags & FLAG_WIN_NOCHECK ? STATUS_OK :
 		check_field("tcp_window",
-			    ntohs(script_packet->tcp->window),
-			    ntohs(actual_packet->tcp->window), error))  ||
+			    ntohs(script_tcp->window),
+			    ntohs(actual_tcp->window), error))  ||
 	    check_field("tcp_urg_ptr",
-			ntohs(script_packet->tcp->urg_ptr),
-			ntohs(actual_packet->tcp->urg_ptr), error))
+			ntohs(script_tcp->urg_ptr),
+			ntohs(actual_tcp->urg_ptr), error))
 		return STATUS_ERR;
 
 	return STATUS_OK;
 }
 
 /* Verify that required actual UDP header fields are as the script expected. */
-static int verify_outbound_live_udp(
+static int verify_udp(
 	const struct packet *actual_packet,
-	const struct packet *script_packet, char **error)
+	const struct packet *script_packet,
+	int layer, char **error)
 {
-	assert(actual_packet->udp != NULL);
+	const struct udp *actual_udp = actual_packet->headers[layer].h.udp;
+	const struct udp *script_udp = script_packet->headers[layer].h.udp;
 
 	if (check_field("udp_len",
-			script_packet->udp->len,
-			actual_packet->udp->len, error))
+			script_udp->len,
+			actual_udp->len, error))
 		return STATUS_ERR;
 	return STATUS_OK;
+}
+
+/* Verify that required actual GRE header fields are as the script expected. */
+static int verify_gre(
+	const struct packet *actual_packet,
+	const struct packet *script_packet,
+	int layer, char **error)
+{
+	const struct gre *actual_gre = actual_packet->headers[layer].h.gre;
+	const struct gre *script_gre = script_packet->headers[layer].h.gre;
+
+	/* TODO(ncardwell) check all fields of GRE header */
+	if (check_field("gre_len",
+			gre_len(script_gre),
+			gre_len(actual_gre), error))
+		return STATUS_ERR;
+	return STATUS_OK;
+}
+
+typedef int (*verifier_func)(
+	const struct packet *actual_packet,
+	const struct packet *script_packet,
+	int layer, char **error);
+
+/* Verify that required actual header fields are as the script expected. */
+static int verify_header(
+	const struct packet *actual_packet,
+	const struct packet *script_packet,
+	int layer, char **error)
+{
+	verifier_func verifiers[HEADER_NUM_TYPES] = {
+		[HEADER_IPV4]	= verify_ipv4,
+		[HEADER_IPV6]	= verify_ipv6,
+		[HEADER_GRE]	= verify_gre,
+		[HEADER_TCP]	= verify_tcp,
+		[HEADER_UDP]	= verify_udp,
+	};
+	verifier_func verifier = NULL;
+	const struct header *actual_header = &actual_packet->headers[layer];
+	const struct header *script_header = &script_packet->headers[layer];
+	enum header_t type = script_header->type;
+
+	if (script_header->type != actual_header->type) {
+		asprintf(error, "live packet header layer %d: "
+			 "expected: %s header vs actual: %s header",
+			 layer,
+			 header_type_info(script_header->type)->name,
+			 header_type_info(actual_header->type)->name);
+		return STATUS_ERR;
+	}
+
+	assert(type > HEADER_NONE);
+	assert(type < HEADER_NUM_TYPES);
+	verifier = verifiers[type];
+	assert(verifier != NULL);
+	return verifier(actual_packet, script_packet, layer, error);
 }
 
 /* Verify that required actual header fields are as the script expected. */
@@ -823,25 +887,29 @@ static int verify_outbound_live_headers(
 	const struct packet *actual_packet,
 	const struct packet *script_packet, char **error)
 {
+	const int actual_headers = packet_header_count(actual_packet);
+	const int script_headers = packet_header_count(script_packet);
+	int i;
+
 	assert((actual_packet->ipv4 != NULL) || (actual_packet->ipv6 != NULL));
 	assert((actual_packet->tcp != NULL) || (actual_packet->udp != NULL));
 
-	if (verify_outbound_live_ipv4(actual_packet, script_packet, error) ||
-	    verify_outbound_live_ipv6(actual_packet, script_packet, error))
-		return STATUS_ERR;
-
-	if (actual_packet->tcp != NULL) {
-		if (verify_outbound_live_tcp(actual_packet, script_packet,
-					     error))
-			return STATUS_ERR;
-	} else if (actual_packet->udp != NULL) {
-		if (verify_outbound_live_udp(actual_packet, script_packet,
-					     error))
-			return STATUS_ERR;
-	} else {
-		asprintf(error, "illegal protocol in outbound packet");
+	if (actual_headers != script_headers) {
+		asprintf(error, "live packet header layers: "
+			 "expected: %d headers vs actual: %d headers",
+			 script_headers, actual_headers);
 		return STATUS_ERR;
 	}
+
+	/* Compare actual vs script headers, layer by layer. */
+	for (i = 0; i < ARRAY_SIZE(script_packet->headers); ++i) {
+		if (script_packet->headers[i].type == HEADER_NONE)
+			break;
+
+		if (verify_header(actual_packet, script_packet, i, error))
+			return STATUS_ERR;
+	}
+
 	return STATUS_OK;
 }
 
