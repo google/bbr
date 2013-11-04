@@ -50,10 +50,25 @@ extern int ipv4_header_append(struct packet *packet,
 			      const char *ip_dst,
 			      char **error);
 
-/* Finalize the IPV4 header by filling in all necessary fields that
+/* Append an IPv6 header to the end of the given packet and fill in
+ * src/dst.  On success, return STATUS_OK; on error return STATUS_ERR
+ * and fill in a malloc-allocated error message in *error.
+ */
+extern int ipv6_header_append(struct packet *packet,
+			      const char *ip_src,
+			      const char *ip_dst,
+			      char **error);
+
+/* Finalize the IPv4 header by filling in all necessary fields that
  * were not filled in at parse time.
  */
 extern int ipv4_header_finish(struct packet *packet,
+			      struct header *header, struct header *next_inner);
+
+/* Finalize the IPv6 header by filling in all necessary fields that
+ * were not filled in at parse time.
+ */
+extern int ipv6_header_finish(struct packet *packet,
 			      struct header *header, struct header *next_inner);
 
 #endif /* __IP_PACKET_H__ */

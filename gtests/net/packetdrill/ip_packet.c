@@ -153,6 +153,37 @@ int ipv4_header_append(struct packet *packet,
 	return STATUS_OK;
 }
 
+int ipv6_header_append(struct packet *packet,
+		       const char *ip_src,
+		       const char *ip_dst,
+		       char **error)
+{
+	struct header *header = NULL;
+	const int ipv6_bytes = sizeof(struct ipv6);
+	struct ipv6 *ipv6 = NULL;
+
+	header = packet_append_header(packet, HEADER_IPV6, ipv6_bytes);
+	if (header == NULL) {
+		asprintf(error, "too many headers");
+		return STATUS_ERR;
+	}
+
+	ipv6 = header->h.ipv6;
+	set_ip_header(ipv6, AF_INET6, sizeof(struct ipv6), ECN_NONE, 0);
+
+	if (inet_pton(AF_INET6, ip_src, &ipv6->src_ip) != 1) {
+		asprintf(error, "bad IPv6 src address: '%s'\n", ip_src);
+		return STATUS_ERR;
+	}
+
+	if (inet_pton(AF_INET6, ip_dst, &ipv6->dst_ip) != 1) {
+		asprintf(error, "bad IPv6 dst address: '%s'\n", ip_dst);
+		return STATUS_ERR;
+	}
+
+	return STATUS_OK;
+}
+
 int ipv4_header_finish(struct packet *packet,
 		       struct header *header, struct header *next_inner)
 {
@@ -165,6 +196,23 @@ int ipv4_header_finish(struct packet *packet,
 	/* Fill in IPv4 header checksum. */
 	ipv4->check = 0;
 	ipv4->check = ipv4_checksum(ipv4, ipv4->ihl * sizeof(u32));
+
+	header->total_bytes = ip_bytes;
+
+	return STATUS_OK;
+}
+
+int ipv6_header_finish(struct packet *packet,
+		       struct header *header, struct header *next_inner)
+{
+	struct ipv6 *ipv6 = header->h.ipv6;
+	int ip_bytes = sizeof(struct ipv6) + next_inner->total_bytes;
+
+	assert(next_inner->total_bytes <= 0xffff);
+	ipv6->payload_len = htons(next_inner->total_bytes);
+	ipv6->next_header = header_type_info(next_inner->type)->ip_proto;
+
+	/* IPv6 has no header checksum. */
 
 	header->total_bytes = ip_bytes;
 

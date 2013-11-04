@@ -131,10 +131,32 @@ c_comment	\/\*(([^*])|(\*[^\/]))*\*\/
  */
 code		\%\{(([^}])|(\}[^\%]))*\}\%
 
-/* A regular experssion for an IP address
- * TODO(ncardwell): IPv6
- */
+/* IPv4: a regular experssion for an IPv4 address */
 ipv4_addr		[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+
+
+/* IPv6: a regular experssion for an IPv6 address. The complexity is
+ * unfortunate, but we can't use a super-simple approach because TCP
+ * sequence number ranges like 1:1001 can look like IPv6 addresses if
+ * we use a naive approach.
+ */
+seg	[0-9a-fA-F]{1,4}
+v0	[:][:]
+v1	({seg}[:]){7,7}{seg}
+v2	({seg}[:]){1,7}[:]
+v3	({seg}[:]){1,6}[:]{seg}
+v4	({seg}[:]){1,5}([:]{seg}){1,2}
+v5	({seg}[:]){1,4}([:]{seg}){1,3}
+v6	({seg}[:]){1,3}([:]{seg}){1,4}
+v7	({seg}[:]){1,2}([:]{seg}){1,5}
+v8	{seg}[:](([:]{seg}){1,6})
+v9	[:]([:]{seg}){1,7}
+/* IPv4-mapped IPv6 address: */
+v10	[:][:]ffff[:]{ipv4_addr}
+/* IPv4-translated IPv6 address: */
+v11	[:][:]ffff[:](0){1,4}[:]{ipv4_addr}
+/* IPv4-embedded IPv6 addresses: */
+v12	({seg}[:]){1,4}[:]{ipv4_addr}
+ipv6_addr ({v0}|{v1}|{v2}|{v3}|{v4}|{v5}|{v6}|{v7}|{v8}|{v9}|{v10}|{v11}|{v12})
 
 %%
 sa_family		return SA_FAMILY;
@@ -150,6 +172,7 @@ onoff			return ONOFF;
 linger			return LINGER;
 htons			return _HTONS_;
 ipv4			return IPV4;
+ipv6			return IPV6;
 icmp			return ICMP;
 udp			return UDP;
 gre			return GRE;
@@ -186,4 +209,5 @@ ce			return CE;
 {c_comment}		/* ignore C-style comment */;
 {code}			yylval.string = code(yytext);   return CODE;
 {ipv4_addr}		yylval.string = strdup(yytext); return IPV4_ADDR;
+{ipv6_addr}		yylval.string = strdup(yytext); return IPV6_ADDR;
 %%

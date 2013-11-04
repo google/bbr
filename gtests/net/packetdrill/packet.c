@@ -37,7 +37,7 @@
 struct header_type_info header_types[HEADER_NUM_TYPES] = {
 	{ "NONE",   0,			0,		NULL },
 	{ "IPV4",   IPPROTO_IPIP,	ETHERTYPE_IP,	ipv4_header_finish },
-	{ "IPV6",   IPPROTO_IPV6,	ETHERTYPE_IPV6, NULL },
+	{ "IPV6",   IPPROTO_IPV6,	ETHERTYPE_IPV6, ipv6_header_finish },
 	{ "GRE",    IPPROTO_GRE,	0,		gre_header_finish },
 	{ "TCP",    IPPROTO_TCP,	0,		NULL },
 	{ "UDP",    IPPROTO_UDP,	0,		NULL },

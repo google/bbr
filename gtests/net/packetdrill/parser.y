@@ -473,11 +473,11 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 %token <reserved> ACK ECR EOL MSS NOP SACK SACKOK TIMESTAMP VAL WIN WSCALE PRO
 %token <reserved> FAST_OPEN
 %token <reserved> ECT0 ECT1 CE ECT01 NO_ECN
-%token <reserved> IPV4 ICMP UDP GRE MTU
+%token <reserved> IPV4 IPV6 ICMP UDP GRE MTU
 %token <reserved> OPTION
 %token <floating> FLOAT
 %token <integer> INTEGER HEX_INTEGER
-%token <string> WORD STRING BACK_QUOTED CODE IPV4_ADDR
+%token <string> WORD STRING BACK_QUOTED CODE IPV4_ADDR IPV6_ADDR
 %type <direction> direction
 %type <ip_ecn> opt_ip_info
 %type <ip_ecn> ip_ecn
@@ -550,7 +550,9 @@ option_value
 | WORD		{ $$ = $1; }
 | STRING	{ $$ = $1; }
 | IPV4_ADDR	{ $$ = $1; }
+| IPV6_ADDR	{ $$ = $1; }
 | IPV4		{ $$ = strdup("ipv4"); }
+| IPV6		{ $$ = strdup("ipv6"); }
 ;
 
 opt_init_command
@@ -746,6 +748,17 @@ packet_prefix
 	char *ip_src = $3;
 	char *ip_dst = $5;
 	if (ipv4_header_append(packet, ip_src, ip_dst, &error))
+		semantic_error(error);
+	free(ip_src);
+	free(ip_dst);
+	$$ = packet;
+}
+| packet_prefix IPV6 IPV6_ADDR '>' IPV6_ADDR ':' {
+	char *error = NULL;
+	struct packet *packet = $1;
+	char *ip_src = $3;
+	char *ip_dst = $5;
+	if (ipv6_header_append(packet, ip_src, ip_dst, &error))
 		semantic_error(error);
 	free(ip_src);
 	free(ip_dst);
