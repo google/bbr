@@ -51,6 +51,50 @@ static void packet_buffer_to_string(FILE *s, struct packet *packet)
 	free(hex);
 }
 
+static int ipv4_header_to_string(FILE *s, struct packet *packet, int layer,
+				 enum dump_format_t format, char **error)
+{
+	char src_string[ADDR_STR_LEN];
+	char dst_string[ADDR_STR_LEN];
+	struct ip_address src_ip, dst_ip;
+	const struct ipv4 *ipv4 = packet->headers[layer].h.ipv4;
+
+	ip_from_ipv4(&ipv4->src_ip, &src_ip);
+	ip_from_ipv4(&ipv4->dst_ip, &dst_ip);
+
+	fprintf(s, "ipv4 %s > %s: ",
+		ip_to_string(&src_ip, src_string),
+		ip_to_string(&dst_ip, dst_string));
+
+	return STATUS_OK;
+}
+
+static int ipv6_header_to_string(FILE *s, struct packet *packet, int layer,
+				 enum dump_format_t format, char **error)
+{
+	char src_string[ADDR_STR_LEN];
+	char dst_string[ADDR_STR_LEN];
+	struct ip_address src_ip, dst_ip;
+	const struct ipv6 *ipv6 = packet->headers[layer].h.ipv6;
+
+	ip_from_ipv6(&ipv6->src_ip, &src_ip);
+	ip_from_ipv6(&ipv6->dst_ip, &dst_ip);
+
+	fprintf(s, "ipv6 %s > %s: ",
+		ip_to_string(&src_ip, src_string),
+		ip_to_string(&dst_ip, dst_string));
+
+	return STATUS_OK;
+}
+
+static int gre_header_to_string(FILE *s, struct packet *packet, int layer,
+				enum dump_format_t format, char **error)
+{
+	fprintf(s, "gre: ");
+
+	return STATUS_OK;
+}
+
 /* Print a string representation of the TCP packet:
  *  direction opt_ip_info flags seq ack window tcp_options
  */
@@ -143,6 +187,28 @@ static int icmpv6_packet_to_string(FILE *s, struct packet *packet,
 	return STATUS_OK;
 }
 
+typedef int (*header_to_string_func)(FILE *s, struct packet *packet, int layer,
+				     enum dump_format_t format, char **error);
+
+static int encap_header_to_string(FILE *s, struct packet *packet, int layer,
+				  enum dump_format_t format, char **error)
+{
+	header_to_string_func printers[HEADER_NUM_TYPES] = {
+		[HEADER_IPV4]	= ipv4_header_to_string,
+		[HEADER_IPV6]	= ipv6_header_to_string,
+		[HEADER_GRE]	= gre_header_to_string,
+	};
+	header_to_string_func printer = NULL;
+	enum header_t type = packet->headers[layer].type;
+
+	assert(type > HEADER_NONE);
+	assert(type < HEADER_NUM_TYPES);
+	printer = printers[type];
+	assert(printer != NULL);
+	return printer(s, packet, layer, format, error);
+}
+
+
 int packet_to_string(struct packet *packet,
 		     enum dump_format_t format,
 		     char **ascii_string, char **error)
@@ -151,6 +217,16 @@ int packet_to_string(struct packet *packet,
 	int result = STATUS_ERR;       /* return value */
 	size_t size = 0;
 	FILE *s = open_memstream(ascii_string, &size);  /* output string */
+	int i;
+	int header_count = packet_header_count(packet);
+
+	/* Print any encapsulation headers preceding layer 3 and 4 headers. */
+	for (i = 0; i < header_count - 2; ++i) {
+		if (packet->headers[i].type == HEADER_NONE)
+			break;
+		if (encap_header_to_string(s, packet, i, format, error))
+			goto out;
+	}
 
 	if ((packet->ipv4 == NULL) && (packet->ipv6 == NULL)) {
 		fprintf(s, "[NO IP HEADER]");
