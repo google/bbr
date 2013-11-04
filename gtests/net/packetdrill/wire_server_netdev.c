@@ -191,36 +191,8 @@ static int wire_server_netdev_receive(struct netdev *a_netdev,
 
 	DEBUGP("wire_server_netdev_receive\n");
 
-	assert(*packet == NULL);	/* should be no packet yet */
-	*packet = packet_new(PACKET_READ_BYTES);
-
-	while (1) {
-		int in_bytes = 0;
-		enum packet_parse_result_t result;
-
-		/* Sniff the next inbound packet from the kernel under test. */
-		if (packet_socket_receive(netdev->psock,
-					  DIRECTION_INBOUND,
-					  *packet, &in_bytes))
-			continue;
-
-		result = parse_packet(*packet, in_bytes,
-					      PACKET_LAYER_2_ETHERNET,
-					      error);
-		if (result == PACKET_OK) {
-			return STATUS_OK;
-		} else if (result == PACKET_BAD) {
-			packet_free(*packet);
-			*packet = NULL;
-			return STATUS_ERR;
-		} else {
-			/* TODO: print these packets in verbose mode? */
-			DEBUGP("parse_result:%d; error parsing packet: %s\n",
-			       result, *error);
-		}
-	}
-
-	return STATUS_ERR;
+	return netdev_receive_loop(netdev->psock, PACKET_LAYER_2_ETHERNET,
+				   packet, error);
 }
 
 struct netdev_ops wire_server_netdev_ops = {

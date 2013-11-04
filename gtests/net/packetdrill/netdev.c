@@ -370,21 +370,28 @@ static int local_netdev_receive(struct netdev *a_netdev,
 
 	DEBUGP("local_netdev_receive\n");
 
+	return netdev_receive_loop(netdev->psock, PACKET_LAYER_3_IP,
+				   packet, error);
+}
+
+int netdev_receive_loop(struct packet_socket *psock,
+			enum packet_layer_t layer,
+			struct packet **packet,
+			char **error)
+{
 	assert(*packet == NULL);	/* should be no packet yet */
 	*packet = packet_new(PACKET_READ_BYTES);
 
 	while (1) {
 		int in_bytes = 0;
+		enum packet_parse_result_t result;
 
 		/* Sniff the next outbound packet from the kernel under test. */
-		if (packet_socket_receive(netdev->psock,
-					  DIRECTION_OUTBOUND,
+		if (packet_socket_receive(psock, DIRECTION_OUTBOUND,
 					  *packet, &in_bytes))
 			continue;
 
-		enum packet_parse_result_t result =
-			parse_packet(*packet, in_bytes,
-					     PACKET_LAYER_3_IP, error);
+		result = parse_packet(*packet, in_bytes, layer, error);
 		if (result == PACKET_OK) {
 			return STATUS_OK;
 		} else if (result == PACKET_BAD) {
@@ -392,7 +399,8 @@ static int local_netdev_receive(struct netdev *a_netdev,
 			*packet = NULL;
 			return STATUS_ERR;
 		} else {
-			DEBUGP("error parsing packet: %s\n", *error);
+			DEBUGP("parse_result:%d; error parsing packet: %s\n",
+			       result, *error);
 		}
 	}
 
