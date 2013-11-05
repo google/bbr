@@ -199,7 +199,7 @@ ce			return CE;
 --[a-zA-Z0-9_]+		yylval.string	= option(yytext); return OPTION;
 [-]?[0-9]*[.][0-9]+	yylval.floating	= atof(yytext);   return FLOAT;
 [-]?[0-9]+		yylval.integer	= atoll(yytext);  return INTEGER;
-0x[0-9]+		yylval.integer	= hextol(yytext); return HEX_INTEGER;
+0x[0-9a-fA-F]+		yylval.integer	= hextol(yytext); return HEX_INTEGER;
 [a-zA-Z0-9_]+		yylval.string	= strdup(yytext); return WORD;
 \"(\\.|[^"])*\"		yylval.string	= quoted(yytext); return STRING;
 \`(\\.|[^`])*\`		yylval.string	= quoted(yytext); return BACK_QUOTED;
