@@ -503,7 +503,7 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 %type <expression_list> expression_list function_arguments
 %type <expression> expression binary_expression array
 %type <expression> decimal_integer hex_integer
-%type <expression> sockaddr msghdr iovec pollfd opt_revents linger
+%type <expression> inaddr sockaddr msghdr iovec pollfd opt_revents linger
 %type <errno_info> opt_errno
 
 %%  /* The grammar follows. */
@@ -1039,6 +1039,9 @@ expression
 | array             {
 	$$ = $1;
 }
+| inaddr          {
+	$$ = $1;
+}
 | sockaddr          {
 	$$ = $1;
 }
@@ -1088,6 +1091,13 @@ array
 | '[' expression_list ']' {
 	$$ = new_expression(EXPR_LIST);
 	$$->value.list = $2;
+}
+;
+
+inaddr
+: INET_ADDR '(' STRING ')' {
+	__be32 ip_address = inet_addr($3);
+	$$ = new_integer_expression(ip_address, "%#lx");
 }
 ;
 
