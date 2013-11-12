@@ -29,6 +29,7 @@
 
 #include "config.h"
 #include "logging.h"
+#include "ip_prefix.h"
 
 /* For the sake of clarity, we require long option names, e.g. --foo,
  * for all options except -v.
@@ -130,7 +131,7 @@ void show_usage(void)
  * - remote address: 192.0.2.0/24 TEST-NET-1 range (RFC 5737)
  */
 
-#define DEFAULT_V4_LIVE_REMOTE_IP_STRING   "192.0.2.1"
+#define DEFAULT_V4_LIVE_REMOTE_IP_STRING   "192.0.2.1/24"
 #define DEFAULT_V4_LIVE_LOCAL_IP_STRING    "192.168.0.1"
 #define DEFAULT_V4_LIVE_GATEWAY_IP_STRING  "192.168.0.2"
 #define DEFAULT_V4_LIVE_NETMASK_IP_STRING  "255.255.0.0"
@@ -146,7 +147,7 @@ void show_usage(void)
  * - remote address: 2001:DB8::/32 documentation prefix (RFC 3849)
  */
 
-#define DEFAULT_V6_LIVE_REMOTE_IP_STRING   "2001:DB8::1"
+#define DEFAULT_V6_LIVE_REMOTE_IP_STRING   "2001:DB8::1/32"
 #define DEFAULT_V6_LIVE_LOCAL_IP_STRING    "fd3d:fa7b:d17d::1"
 #define DEFAULT_V6_LIVE_GATEWAY_IP_STRING  "fd3d:fa7b:d17d::2"
 #define DEFAULT_V6_LIVE_PREFIX_LEN         48
@@ -216,6 +217,17 @@ void set_default_config(struct config *config)
 	config->wire_server_device	= "eth0";
 }
 
+static void set_remote_ip_and_prefix(struct config *config)
+{
+	config->live_remote_ip = config->live_remote_prefix.ip;
+	ip_to_string(&config->live_remote_ip,
+		     config->live_remote_ip_string);
+
+	ip_prefix_normalize(&config->live_remote_prefix);
+	ip_prefix_to_string(&config->live_remote_prefix,
+			    config->live_remote_prefix_string);
+}
+
 /* Here's a table summarizing the types of various entities in the
  * different flavors of IP that we support:
  *
@@ -230,8 +242,13 @@ void set_default_config(struct config *config)
 static void finalize_ipv4_config(struct config *config)
 {
 	set_ipv4_defaults(config);
+
 	config->live_local_ip	= ipv4_parse(config->live_local_ip_string);
-	config->live_remote_ip	= ipv4_parse(config->live_remote_ip_string);
+
+	config->live_remote_prefix =
+		ipv4_prefix_parse(config->live_remote_ip_string);
+	set_remote_ip_and_prefix(config);
+
 	config->live_prefix_len =
 		netmask_to_prefix(config->live_netmask_ip_string);
 	config->live_gateway_ip = ipv4_parse(config->live_gateway_ip_string);
@@ -245,8 +262,13 @@ static void finalize_ipv4_config(struct config *config)
 static void finalize_ipv4_mapped_ipv6_config(struct config *config)
 {
 	set_ipv4_defaults(config);
+
 	config->live_local_ip	= ipv4_parse(config->live_local_ip_string);
-	config->live_remote_ip	= ipv4_parse(config->live_remote_ip_string);
+
+	config->live_remote_prefix =
+		ipv4_prefix_parse(config->live_remote_ip_string);
+	set_remote_ip_and_prefix(config);
+
 	config->live_prefix_len =
 		netmask_to_prefix(config->live_netmask_ip_string);
 	config->live_gateway_ip = ipv4_parse(config->live_gateway_ip_string);
@@ -260,8 +282,13 @@ static void finalize_ipv4_mapped_ipv6_config(struct config *config)
 static void finalize_ipv6_config(struct config *config)
 {
 	set_ipv6_defaults(config);
+
 	config->live_local_ip	= ipv6_parse(config->live_local_ip_string);
-	config->live_remote_ip	= ipv6_parse(config->live_remote_ip_string);
+
+	config->live_remote_prefix =
+		ipv6_prefix_parse(config->live_remote_ip_string);
+	set_remote_ip_and_prefix(config);
+
 	config->live_prefix_len	= DEFAULT_V6_LIVE_PREFIX_LEN;
 	config->live_gateway_ip = ipv6_parse(config->live_gateway_ip_string);
 	config->live_bind_ip	= ipv6_parse("::");

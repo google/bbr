@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include "ip_address.h"
+#include "ip_prefix.h"
 #include "script.h"
 
 #define TUN_DRIVER_SPEED_CUR	0	/* don't change current speed */
@@ -54,10 +55,12 @@ struct config {
 
 	struct ip_address live_local_ip;	/* local interface IP */
 	struct ip_address live_remote_ip;	/* remote interface IP */
+	struct ip_prefix live_remote_prefix;	/* remote prefix under test */
 	struct ip_address live_gateway_ip;	/* gateway interface IP */
 
 	char live_local_ip_string[ADDR_STR_LEN];	/* human-readable IP */
 	char live_remote_ip_string[ADDR_STR_LEN];	/* human-readable IP */
+	char live_remote_prefix_string[ADDR_STR_LEN];	/* <addr>/<prefixlen> */
 
 	char live_gateway_ip_string[ADDR_STR_LEN];	/* local gateway IP */
 	char live_netmask_ip_string[ADDR_STR_LEN];	/* local netmask */

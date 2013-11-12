@@ -70,9 +70,9 @@ static void route_traffic_to_wire_server(struct config *config,
 		 "ip %s route del %s > /dev/null 2>&1 ; "
 		 "ip %s route add %s dev %s via %s > /dev/null 2>&1",
 		 (config->wire_protocol == AF_INET6) ? "-6" : "",
-		 config->live_remote_ip_string,
+		 config->live_remote_prefix_string,
 		 (config->wire_protocol == AF_INET6) ? "-6" : "",
-		 config->live_remote_ip_string,
+		 config->live_remote_prefix_string,
 		 netdev->name,
 		 config->live_gateway_ip_string);
 #endif
@@ -80,16 +80,16 @@ static void route_traffic_to_wire_server(struct config *config,
 	if (config->wire_protocol == AF_INET) {
 		asprintf(&route_command,
 			 "route delete %s > /dev/null 2>&1 ; "
-			 "route add %s/32 %s > /dev/null 2>&1",
-			 config->live_remote_ip_string,
-			 config->live_remote_ip_string,
+			 "route add %s %s > /dev/null 2>&1",
+			 config->live_remote_prefix_string,
+			 config->live_remote_prefix_string,
 			 config->live_gateway_ip_string);
 	} else if (config->wire_protocol == AF_INET6) {
 		asprintf(&route_command,
 			 "route delete -inet6 %s > /dev/null 2>&1 ; "
 			 "route add -inet6 %s %s > /dev/null 2>&1",
-			 config->live_remote_ip_string,
-			 config->live_remote_ip_string,
+			 config->live_remote_prefix_string,
+			 config->live_remote_prefix_string,
 			 config->live_gateway_ip_string);
 	} else {
 		assert(!"bad wire protocol");
