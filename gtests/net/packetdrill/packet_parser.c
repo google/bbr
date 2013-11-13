@@ -432,6 +432,57 @@ error_out:
 	return PACKET_BAD;
 }
 
+/* Parse the GRE header. Return a packet_parse_result_t. */
+static int parse_gre(struct packet *packet, u8 *layer4_start, int layer4_bytes,
+		     u8 *packet_end, char **error)
+{
+	struct header *gre_header = NULL;
+	u8 *p = layer4_start;
+	struct gre *gre = (struct gre *) p;
+
+	assert(layer4_bytes >= 0);
+	if (layer4_bytes < sizeof(struct gre)) {
+		asprintf(error, "Truncated GRE header");
+		goto error_out;
+	}
+	if (gre->version != 0) {
+		asprintf(error, "GRE header has unsupported version number");
+		goto error_out;
+	}
+	if (gre->has_routing) {
+		asprintf(error, "GRE header has unsupported routing info");
+		goto error_out;
+	}
+	const int gre_header_len = gre_len(gre);
+	if (gre_header_len < sizeof(struct gre)) {
+		asprintf(error, "GRE header length too small for GRE header");
+		goto error_out;
+	}
+	if (gre_header_len > layer4_bytes) {
+		asprintf(error, "GRE header length too big");
+		goto error_out;
+	}
+
+	assert(p + layer4_bytes <= packet_end);
+
+	DEBUGP("GRE header len: %d\n", gre_header_len);
+
+	gre_header = packet_append_header(packet, HEADER_GRE, gre_header_len);
+	if (gre_header == NULL) {
+		asprintf(error, "Too many nested headers at GRE header");
+		goto error_out;
+	}
+	gre_header->total_bytes = layer4_bytes;
+
+	p += gre_header_len;
+	assert(p <= packet_end);
+	return parse_layer3_packet_by_proto(packet, ntohs(gre->protocol),
+					    p, packet_end, error);
+
+error_out:
+	return PACKET_BAD;
+}
+
 static int parse_layer4(struct packet *packet, u8 *layer4_start,
 			int layer4_protocol, int layer4_bytes,
 			u8 *packet_end, bool *is_inner, char **error)
@@ -443,6 +494,10 @@ static int parse_layer4(struct packet *packet, u8 *layer4_start,
 	} else if (layer4_protocol == IPPROTO_UDP) {
 		*is_inner = true;	/* found inner-most layer 4 */
 		return parse_udp(packet, layer4_start, layer4_bytes, packet_end,
+				 error);
+	} else if (layer4_protocol == IPPROTO_GRE) {
+		*is_inner = false;
+		return parse_gre(packet, layer4_start, layer4_bytes, packet_end,
 				 error);
 	} else if (layer4_protocol == IPPROTO_IPIP) {
 		*is_inner = false;
