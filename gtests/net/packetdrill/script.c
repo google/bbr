@@ -52,6 +52,7 @@ struct expression_type_entry {
 	const char *name;
 };
 struct expression_type_entry expression_type_table[] = {
+	{ EXPR_NONE,                 "none" },
 	{ EXPR_ELLIPSIS,             "ellipsis" },
 	{ EXPR_INTEGER,              "integer" },
 	{ EXPR_WORD,                 "word" },
@@ -64,7 +65,7 @@ struct expression_type_entry expression_type_table[] = {
 	{ EXPR_IOVEC,                "iovec" },
 	{ EXPR_MSGHDR,               "msghdr" },
 	{ EXPR_POLLFD,               "pollfd" },
-	{-1,                         NULL}
+	{ NUM_EXPR_TYPES,            NULL}
 };
 
 const char *expression_type_to_string(enum expression_t type)
@@ -261,7 +262,8 @@ void free_expression(struct expression *expression)
 {
 	if (expression == NULL)
 		return;
-	if ((expression->type < 0) || (expression->type >= NUM_EXPR_TYPES))
+	if ((expression->type <= EXPR_NONE) ||
+	    (expression->type >= NUM_EXPR_TYPES))
 		assert(!"bad expression type");
 	switch (expression->type) {
 	case EXPR_ELLIPSIS:
@@ -313,6 +315,7 @@ void free_expression(struct expression *expression)
 		free_expression(expression->value.pollfd->events);
 		free_expression(expression->value.pollfd->revents);
 		break;
+	case EXPR_NONE:
 	case NUM_EXPR_TYPES:
 		break;
 	/* missing default case so compiler catches missing cases */
@@ -460,7 +463,8 @@ static int evaluate(struct expression *in,
 	*out_ptr = out;
 	out->type = in->type;	/* most types of expression stay the same */
 
-	if ((in->type < 0) || (in->type >= NUM_EXPR_TYPES)) {
+	if ((in->type <= EXPR_NONE) ||
+	    (in->type >= NUM_EXPR_TYPES)) {
 		asprintf(error, "bad expression type: %d", in->type);
 		return STATUS_ERR;
 	}
@@ -513,6 +517,7 @@ static int evaluate(struct expression *in,
 	case EXPR_POLLFD:
 		result = evaluate_pollfd_expression(in, out, error);
 		break;
+	case EXPR_NONE:
 	case NUM_EXPR_TYPES:
 		break;
 	/* missing default case so compiler catches missing cases */

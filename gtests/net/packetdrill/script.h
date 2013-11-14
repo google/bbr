@@ -32,6 +32,7 @@
 
 /* The types of expressions in a script */
 enum expression_t {
+	EXPR_NONE,
 	EXPR_ELLIPSIS,		  /* ... but no value */
 	EXPR_INTEGER,		  /* integer in 'num' */
 	EXPR_LINGER,		  /* struct linger for SO_LINGER */
