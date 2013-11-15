@@ -178,7 +178,7 @@ static int check_type(struct expression *expression,
 }
 
 /* Sets the value from the expression argument, checking that it is a
- * valid s32 and matches the expected type. Returns STATUS_OK on
+ * valid s32 or u32, and matches the expected type. Returns STATUS_OK on
  * success; on failure returns STATUS_ERR and sets error message.
  */
 static int get_s32(struct expression *expression,
@@ -186,10 +186,10 @@ static int get_s32(struct expression *expression,
 {
 	if (check_type(expression, EXPR_INTEGER, error))
 		return STATUS_ERR;
-	if ((expression->value.num > INT_MAX) ||
+	if ((expression->value.num > UINT_MAX) ||
 	    (expression->value.num < INT_MIN)) {
 		asprintf(error,
-			 "Value out of range for 32-bit signed int: %lld",
+			 "Value out of range for 32-bit integer: %lld",
 			 expression->value.num);
 		return STATUS_ERR;
 	}
