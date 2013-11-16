@@ -49,7 +49,7 @@
 #define TUN_DEV                 "tun0"
 
 #define HAVE_TCP_INFO           1
-#if __FreeBSD_version > 1000028
+#if (__FreeBSD_version < 1000000 && __FreeBSD_version > 902000) || __FreeBSD_version > 1000028
 #define HAVE_FMEMOPEN           1
 #endif
 
