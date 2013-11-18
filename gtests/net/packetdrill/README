@@ -31,11 +31,11 @@ Here's a quick example.
 
 On FreeBSD, OpenBSD, and NetBSD, try:
 
-# ./packetdrill examples/fr-4pkt-sack-bsd.pkt
+# ./packetdrill tests/bsd/fast_retransmit/fr-4pkt-sack-bsd.pkt
 
 On Linux try:
 
-# ./packetdrill examples/fr-4pkt-sack-linux.pkt
+# ./packetdrill tests/linux/fast_retransmit/fr-4pkt-sack-linux.pkt
 
 
 license
