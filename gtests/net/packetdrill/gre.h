@@ -51,6 +51,7 @@ struct gre {
 		has_key:1,
 		has_seq:1,
 		strict_route:1,
+		recursion_control:3,
 		ack:1,
 		reserved:4,
 		version:3;
