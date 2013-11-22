@@ -48,6 +48,8 @@ static int parse_ipv4(struct packet *packet, u8 *header_start, u8 *packet_end,
 		      char **error);
 static int parse_ipv6(struct packet *packet, u8 *header_start, u8 *packet_end,
 		      char **error);
+static int parse_mpls(struct packet *packet, u8 *header_start, u8 *packet_end,
+		      char **error);
 static int parse_layer3_packet_by_proto(struct packet *packet,
 					u16 proto, u8 *header_start,
 					u8 *packet_end, char **error);
@@ -55,12 +57,11 @@ static int parse_layer4(struct packet *packet, u8 *header_start,
 			int layer4_protocol, int layer4_bytes,
 			u8 *packet_end, bool *is_inner, char **error);
 
-static int parse_layer2_packet(struct packet *packet, int in_bytes,
-				       char **error)
+static int parse_layer2_packet(struct packet *packet,
+			       u8 *header_start, u8 *packet_end,
+			       char **error)
 {
-	u8 *p = packet->buffer;
-	/* Note that packet_end points to the byte beyond the end of packet. */
-	u8 *packet_end = packet->buffer + in_bytes;
+	u8 *p = header_start;
 	struct ether_header *ether = NULL;
 
 	/* Find Ethernet header */
@@ -122,6 +123,9 @@ static int parse_layer3_packet_by_proto(struct packet *packet,
 			asprintf(error, "Bad IP version for ETHERTYPE_IPV6");
 			goto error_out;
 		}
+	} else if ((proto == ETHERTYPE_MPLS_UC) ||
+		   (proto == ETHERTYPE_MPLS_MC)) {
+		return parse_mpls(packet, p, packet_end, error);
 	} else {
 		return PACKET_UNKNOWN_L4;
 	}
@@ -130,12 +134,12 @@ error_out:
 	return PACKET_BAD;
 }
 
-static int parse_layer3_packet(struct packet *packet, int in_bytes,
-				       char **error)
+static int parse_layer3_packet(struct packet *packet,
+			       u8 *header_start, u8 *packet_end,
+			       char **error)
 {
-	u8 *p = packet->buffer;
+	u8 *p = header_start;
 	/* Note that packet_end points to the byte beyond the end of packet. */
-	u8 *packet_end = packet->buffer + in_bytes;
 	struct ipv4 *ip = NULL;
 
 	/* Examine IPv4/IPv6 header. */
@@ -164,11 +168,16 @@ int parse_packet(struct packet *packet, int in_bytes,
 	char *message = NULL;		/* human-readable error summary */
 	char *hex = NULL;		/* hex dump of bad packet */
 	enum packet_parse_result_t result = PACKET_BAD;
+	u8 *header_start = packet->buffer;
+	/* packet_end points to the byte beyond the end of packet. */
+	u8 *packet_end = packet->buffer + in_bytes;
 
 	if (layer == PACKET_LAYER_2_ETHERNET)
-		result = parse_layer2_packet(packet, in_bytes, error);
+		result = parse_layer2_packet(packet, header_start, packet_end,
+					     error);
 	else if (layer == PACKET_LAYER_3_IP)
-		result = parse_layer3_packet(packet, in_bytes, error);
+		result = parse_layer3_packet(packet, header_start, packet_end,
+					     error);
 	else
 		assert(!"bad layer");
 
@@ -478,6 +487,47 @@ static int parse_gre(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 	assert(p <= packet_end);
 	return parse_layer3_packet_by_proto(packet, ntohs(gre->protocol),
 					    p, packet_end, error);
+
+error_out:
+	return PACKET_BAD;
+}
+
+int parse_mpls(struct packet *packet, u8 *header_start, u8 *packet_end,
+		      char **error)
+{
+	struct header *mpls_header = NULL;
+	u8 *p = header_start;
+	int mpls_header_bytes = 0;
+	int mpls_total_bytes = packet_end - p;
+	bool is_stack_bottom = false;
+
+	do {
+		struct mpls *mpls_entry = (struct mpls *)(p);
+
+		if (p + sizeof(struct mpls) > packet_end) {
+			asprintf(error, "MPLS stack entry overflows packet");
+			goto error_out;
+		}
+
+		is_stack_bottom = mpls_entry_stack(mpls_entry);
+
+		p += sizeof(struct mpls);
+		mpls_header_bytes += sizeof(struct mpls);
+	} while (!is_stack_bottom && p < packet_end);
+
+	assert(mpls_header_bytes <= mpls_total_bytes);
+
+	mpls_header = packet_append_header(packet, HEADER_MPLS,
+					   mpls_header_bytes);
+	if (mpls_header == NULL) {
+		asprintf(error, "Too many nested headers at MPLS header");
+		goto error_out;
+	}
+	mpls_header->total_bytes = mpls_total_bytes;
+
+	/* Move on to the header inside the MPLS label stack. */
+	assert(p <= packet_end);
+	return parse_layer3_packet(packet, p, packet_end, error);
 
 error_out:
 	return PACKET_BAD;
