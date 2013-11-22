@@ -38,6 +38,7 @@
 #include "icmpv6.h"
 #include "ip.h"
 #include "ipv6.h"
+#include "mpls.h"
 #include "tcp.h"
 #include "udp.h"
 
@@ -49,6 +50,7 @@ enum header_t {
 	HEADER_IPV4,
 	HEADER_IPV6,
 	HEADER_GRE,
+	HEADER_MPLS,
 	HEADER_TCP,
 	HEADER_UDP,
 	HEADER_ICMPV4,
@@ -66,6 +68,7 @@ struct header {
 		struct ipv4 *ipv4;
 		struct ipv6 *ipv6;
 		struct gre *gre;
+		struct mpls *mpls;
 		struct tcp *tcp;
 		struct udp *udp;
 		struct icmpv4 *icmpv4;

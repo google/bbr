@@ -38,6 +38,8 @@
 /* Ethernet header ether_type values. */
 #define	ETHERTYPE_IP		0x0800	/* IP protocol version 4 */
 #define	ETHERTYPE_IPV6		0x86dd	/* IP protocol version 6 */
+#define	ETHERTYPE_MPLS_UC	0x8847	/* MPLS unicast */
+#define	ETHERTYPE_MPLS_MC	0x8848	/* MPLS multicast */
 
 /* To tell a packet socket that you want traffic for all protocols. */
 #define ETH_P_ALL       0x0003
