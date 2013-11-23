@@ -843,6 +843,36 @@ static int verify_gre(
 	return STATUS_OK;
 }
 
+/* Verify that required actual MPLS header fields are as the script expected. */
+static int verify_mpls(
+	const struct packet *actual_packet,
+	const struct packet *script_packet,
+	int layer, char **error)
+{
+	const struct header *actual_header = &actual_packet->headers[layer];
+	const struct header *script_header = &script_packet->headers[layer];
+	const struct mpls *actual_mpls = actual_packet->headers[layer].h.mpls;
+	const struct mpls *script_mpls = script_packet->headers[layer].h.mpls;
+	int num_entries = script_header->header_bytes / sizeof(struct mpls);
+	int i = 0;
+
+	if (script_header->header_bytes != actual_header->header_bytes) {
+		asprintf(error, "mismatch in MPLS label stack depth");
+		return STATUS_ERR;
+	}
+
+	for (i = 0; i < num_entries; ++i) {
+		const struct mpls *actual_entry = actual_mpls + i;
+		const struct mpls *script_entry = script_mpls + i;
+		if (memcmp(actual_entry, script_entry, sizeof(*script_entry))) {
+			asprintf(error, "mismatch in MPLS label %d", i);
+			return STATUS_ERR;
+		}
+	}
+
+	return STATUS_OK;
+}
+
 typedef int (*verifier_func)(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
@@ -858,6 +888,7 @@ static int verify_header(
 		[HEADER_IPV4]	= verify_ipv4,
 		[HEADER_IPV6]	= verify_ipv6,
 		[HEADER_GRE]	= verify_gre,
+		[HEADER_MPLS]	= verify_mpls,
 		[HEADER_TCP]	= verify_tcp,
 		[HEADER_UDP]	= verify_udp,
 	};
