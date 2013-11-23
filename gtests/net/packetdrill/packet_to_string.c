@@ -95,6 +95,29 @@ static int gre_header_to_string(FILE *s, struct packet *packet, int layer,
 	return STATUS_OK;
 }
 
+static int mpls_header_to_string(FILE *s, struct packet *packet, int layer,
+				 enum dump_format_t format, char **error)
+{
+	struct header *header = &packet->headers[layer];
+	int num_entries = header->header_bytes / sizeof(struct mpls);
+	int i = 0;
+
+	fprintf(s, "mpls");
+
+	for (i = 0; i < num_entries; ++i) {
+		const struct mpls *mpls = header->h.mpls + i;
+
+		fprintf(s, " (label %u, tc %u,%s ttl %u)",
+			mpls_entry_label(mpls),
+			mpls_entry_tc(mpls),
+			mpls_entry_stack(mpls) ? " [S]," : "",
+			mpls_entry_ttl(mpls));
+	}
+
+	fprintf(s, ": ");
+	return STATUS_OK;
+}
+
 /* Print a string representation of the TCP packet:
  *  direction opt_ip_info flags seq ack window tcp_options
  */
@@ -197,6 +220,7 @@ static int encap_header_to_string(FILE *s, struct packet *packet, int layer,
 		[HEADER_IPV4]	= ipv4_header_to_string,
 		[HEADER_IPV6]	= ipv6_header_to_string,
 		[HEADER_GRE]	= gre_header_to_string,
+		[HEADER_MPLS]	= mpls_header_to_string,
 	};
 	header_to_string_func printer = NULL;
 	enum header_t type = packet->headers[layer].type;
