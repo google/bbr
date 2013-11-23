@@ -284,6 +284,104 @@ static void test_parse_ipv4_gre_ipv4_tcp_packet(void)
 	packet_free(packet);
 }
 
+static void test_parse_ipv4_gre_mpls_ipv4_tcp_packet(void)
+{
+	u8 *p = NULL;
+	int i = 0;
+
+	/* An IPv4/GRE/MPLS/IPv4/TCP packet. */
+	u8 data[] = {
+		/* ipv4 192.168.0.1 > 192.0.2.2: gre:
+		   mpls
+		   (label 0, tc 0, ttl 0)
+		   (label 1048575, tc 7, [S], ttl 255):
+		   192.168.0.1:8080 > 192.0.2.1:56268
+		   F. 2072102268:2072102268(0) ack 1 win 453
+		   <nop,nop,TS val 117573699 ecr 5>
+		*/
+
+		/* IPv4: */
+		0x45, 0x00, 0x00, 0x54, 0x00, 0x00, 0x40, 0x00,
+		0x40, 0x2f, 0xb7, 0xcf, 0xc0, 0xa8, 0x00, 0x01,
+		0xc0, 0x00, 0x02, 0x02,
+		/* GRE: */
+		0x00, 0x00, 0x88, 0x47,
+		/* MPLS: */
+		0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
+		/* IPv4, TCP: */
+		0x45, 0x00, 0x00, 0x34, 0x86, 0x99, 0x40, 0x00,
+		0x40, 0x06, 0x31, 0x80, 0xc0, 0xa8, 0x00, 0x01,
+		0xc0, 0x00, 0x02, 0x01, 0x1f, 0x90, 0xdb, 0xcc,
+		0x7b, 0x81, 0xc5, 0x7c, 0x00, 0x00, 0x00, 0x01,
+		0x80, 0x11, 0x01, 0xc5, 0xa6, 0xa6, 0x00, 0x00,
+		0x01, 0x01, 0x08, 0x0a, 0x07, 0x02, 0x08, 0x43,
+		0x00, 0x00, 0x00, 0x05
+	};
+
+	struct packet *packet = packet_new(sizeof(data));
+
+	/* Populate and parse a packet */
+	memcpy(packet->buffer, data, sizeof(data));
+	char *error = NULL;
+	enum packet_parse_result_t result =
+		parse_packet(packet, sizeof(data), PACKET_LAYER_3_IP,
+				     &error);
+	assert(result == PACKET_OK);
+	assert(error == NULL);
+
+	p = packet->buffer;
+	i = 0;			/* outer most layer, 0 */
+
+	assert(packet->headers[i].type	== HEADER_IPV4);
+	assert(packet->headers[i].h.ptr	== p);
+	assert(packet->headers[i].header_bytes == sizeof(struct ipv4));
+	p += packet->headers[i].header_bytes;
+	i++;
+
+	assert(packet->headers[i].type	== HEADER_GRE);
+	assert(packet->headers[i].h.ptr	== p);
+	assert(packet->headers[i].header_bytes == sizeof(struct gre));
+	p += packet->headers[i].header_bytes;
+	i++;
+
+	assert(packet->headers[i].type	== HEADER_MPLS);
+	assert(packet->headers[i].h.ptr	== p);
+	assert(packet->headers[i].header_bytes == 2*sizeof(struct mpls));
+	p += packet->headers[i].header_bytes;
+	i++;
+
+	struct ipv4 *expected_inner_ipv4 = (struct ipv4 *)p;
+	assert(packet->headers[i].type	== HEADER_IPV4);
+	assert(packet->headers[i].h.ptr	== p);
+	assert(packet->headers[i].header_bytes == sizeof(struct ipv4));
+	p += packet->headers[i].header_bytes;
+	i++;
+
+	struct tcp *expected_tcp = (struct tcp *)p;
+	assert(packet->headers[i].type	== HEADER_TCP);
+	assert(packet->headers[i].h.ptr	== p);
+	assert(packet->headers[i].header_bytes ==
+	       sizeof(struct tcp) + TCPOLEN_TIMESTAMP + 2);  /* 2 for 2 NOPs */
+	p += packet->headers[i].header_bytes;
+	i++;
+
+	assert(packet->headers[i].type	== HEADER_NONE);
+
+	assert(packet->ip_bytes		== sizeof(data));
+	assert(packet->ipv4		== expected_inner_ipv4);
+	assert(packet->ipv6		== NULL);
+	assert(packet->tcp		== expected_tcp);
+	assert(packet->udp		== NULL);
+	assert(packet->icmpv4		== NULL);
+	assert(packet->icmpv6		== NULL);
+
+	assert(packet->time_usecs	== 0);
+	assert(packet->flags		== 0);
+	assert(packet->ecn		== 0);
+
+	packet_free(packet);
+}
+
 int main(void)
 {
 	test_parse_tcp_ipv4_packet();
@@ -291,5 +389,6 @@ int main(void)
 	test_parse_udp_ipv4_packet();
 	test_parse_udp_ipv6_packet();
 	test_parse_ipv4_gre_ipv4_tcp_packet();
+	test_parse_ipv4_gre_mpls_ipv4_tcp_packet();
 	return 0;
 }
