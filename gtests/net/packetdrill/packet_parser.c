@@ -441,6 +441,83 @@ error_out:
 	return PACKET_BAD;
 }
 
+/* Parse the ICMPv4 header. Return a packet_parse_result_t. */
+static int parse_icmpv4(struct packet *packet, u8 *layer4_start,
+			int layer4_bytes, u8 *packet_end, char **error)
+{
+	struct header *icmp_header = NULL;
+	const int icmp_header_len = sizeof(struct icmpv4);
+	u8 *p = layer4_start;
+
+	assert(layer4_bytes >= 0);
+	/* Make sure the immediately preceding header was IPv4. */
+	if (packet_inner_header(packet)->type != HEADER_IPV4) {
+		asprintf(error, "Bad IP version for IPPROTO_ICMP");
+		goto error_out;
+	}
+
+	if (layer4_bytes < sizeof(struct icmpv4)) {
+		asprintf(error, "Truncated ICMPv4 header");
+		goto error_out;
+	}
+
+	packet->icmpv4 = (struct icmpv4 *) p;
+
+	icmp_header = packet_append_header(packet, HEADER_ICMPV4,
+					   icmp_header_len);
+	if (icmp_header == NULL) {
+		asprintf(error, "Too many nested headers at ICMPV4 header");
+		goto error_out;
+	}
+	icmp_header->total_bytes = layer4_bytes;
+
+	p += layer4_bytes;
+	assert(p <= packet_end);
+
+	return PACKET_OK;
+
+error_out:
+	return PACKET_BAD;
+}
+
+/* Parse the ICMPv6 header. Return a packet_parse_result_t. */
+static int parse_icmpv6(struct packet *packet, u8 *layer4_start,
+			int layer4_bytes, u8 *packet_end, char **error)
+{
+	struct header *icmp_header = NULL;
+	const int icmp_header_len = sizeof(struct icmpv6);
+	u8 *p = layer4_start;
+
+	assert(layer4_bytes >= 0);
+	/* Make sure the immediately preceding header was IPv6. */
+	if (packet_inner_header(packet)->type != HEADER_IPV6) {
+		asprintf(error, "Bad IP version for IPPROTO_ICMPV6");
+		goto error_out;
+	}
+	if (layer4_bytes < sizeof(struct icmpv6)) {
+		asprintf(error, "Truncated ICMPv6 header");
+		goto error_out;
+	}
+
+	packet->icmpv6 = (struct icmpv6 *) p;
+
+	icmp_header = packet_append_header(packet, HEADER_ICMPV6,
+					   icmp_header_len);
+	if (icmp_header == NULL) {
+		asprintf(error, "Too many nested headers at ICMPV6 header");
+		goto error_out;
+	}
+	icmp_header->total_bytes = layer4_bytes;
+
+	p += layer4_bytes;
+	assert(p <= packet_end);
+
+	return PACKET_OK;
+
+error_out:
+	return PACKET_BAD;
+}
+
 /* Parse the GRE header. Return a packet_parse_result_t. */
 static int parse_gre(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 		     u8 *packet_end, char **error)
@@ -545,6 +622,14 @@ static int parse_layer4(struct packet *packet, u8 *layer4_start,
 		*is_inner = true;	/* found inner-most layer 4 */
 		return parse_udp(packet, layer4_start, layer4_bytes, packet_end,
 				 error);
+	} else if (layer4_protocol == IPPROTO_ICMP) {
+		*is_inner = true;	/* found inner-most layer 4 */
+		return parse_icmpv4(packet, layer4_start, layer4_bytes,
+				    packet_end, error);
+	} else if (layer4_protocol == IPPROTO_ICMPV6) {
+		*is_inner = true;	/* found inner-most layer 4 */
+		return parse_icmpv6(packet, layer4_start, layer4_bytes,
+				    packet_end, error);
 	} else if (layer4_protocol == IPPROTO_GRE) {
 		*is_inner = false;
 		return parse_gre(packet, layer4_start, layer4_bytes, packet_end,
