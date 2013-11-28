@@ -20,6 +20,7 @@ packetdrill-lib := \
          symbols_openbsd.o \
          symbols_netbsd.o \
          gre_packet.o icmp_packet.o ip_packet.o tcp_packet.o udp_packet.o \
+         mpls_packet.o \
          run.o run_command.o run_packet.o run_system_call.o \
          script.o socket.o system.o \
          tcp_options.o tcp_options_iterator.o tcp_options_to_string.o \

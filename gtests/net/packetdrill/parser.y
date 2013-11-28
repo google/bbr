@@ -95,6 +95,8 @@
 #include "ip_packet.h"
 #include "icmp_packet.h"
 #include "logging.h"
+#include "mpls.h"
+#include "mpls_packet.h"
 #include "tcp_packet.h"
 #include "udp_packet.h"
 #include "parse.h"
@@ -441,6 +443,8 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 	s64 time_usecs;
 	enum direction_t direction;
 	enum ip_ecn_t ip_ecn;
+	struct mpls_stack *mpls_stack;
+	struct mpls mpls_stack_entry;
 	u16 port;
 	s32 window;
 	u32 sequence_number;
@@ -474,6 +478,7 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 %token <reserved> FAST_OPEN
 %token <reserved> ECT0 ECT1 CE ECT01 NO_ECN
 %token <reserved> IPV4 IPV6 ICMP UDP GRE MTU
+%token <reserved> MPLS LABEL TC TTL
 %token <reserved> OPTION
 %token <floating> FLOAT
 %token <integer> INTEGER HEX_INTEGER
@@ -489,6 +494,9 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 %type <syscall> syscall_spec
 %type <command> command_spec
 %type <code> code_spec
+%type <mpls_stack> mpls_stack
+%type <mpls_stack_entry> mpls_stack_entry
+%type <integer> opt_mpls_stack_bottom
 %type <integer> opt_icmp_mtu
 %type <string> icmp_type opt_icmp_code flags
 %type <string> opt_tcp_fast_open_cookie tcp_fast_open_cookie
@@ -770,6 +778,54 @@ packet_prefix
 	if (gre_header_append(packet, &error))
 		semantic_error(error);
 	$$ = packet;
+}
+| packet_prefix MPLS mpls_stack ':' {
+	char *error = NULL;
+	struct packet *packet = $1;
+	struct mpls_stack *mpls_stack = $3;
+
+	if (mpls_header_append(packet, mpls_stack, &error))
+		semantic_error(error);
+	free(mpls_stack);
+	$$ = packet;
+}
+;
+
+mpls_stack
+:				{
+	$$ = mpls_stack_new();
+}
+| mpls_stack mpls_stack_entry	{
+	if (mpls_stack_append($1, $2))
+		semantic_error("too many MPLS labels");
+	$$ = $1;
+}
+;
+
+mpls_stack_entry
+:
+'(' LABEL INTEGER ',' TC INTEGER ',' opt_mpls_stack_bottom TTL INTEGER ')' {
+	char *error = NULL;
+	s64 label = $3;
+	s64 traffic_class = $6;
+	bool is_stack_bottom = $8;
+	s64 ttl = $10;
+	struct mpls mpls;
+
+	if (new_mpls_stack_entry(label, traffic_class, is_stack_bottom, ttl,
+				 &mpls, &error))
+		semantic_error(error);
+	$$ = mpls;
+}
+;
+
+opt_mpls_stack_bottom
+:			{ $$ = 0; }
+| '[' WORD ']' ','	{
+	if (strcmp($2, "S") != 0)
+		semantic_error("expected [S] for MPLS label stack bottom");
+	free($2);
+	$$ = 1;
 }
 ;
 

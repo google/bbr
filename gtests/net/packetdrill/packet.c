@@ -31,6 +31,7 @@
 #include "ethernet.h"
 #include "gre_packet.h"
 #include "ip_packet.h"
+#include "mpls_packet.h"
 
 
 /* Info for all types of header we support. */
@@ -39,6 +40,7 @@ struct header_type_info header_types[HEADER_NUM_TYPES] = {
 	{ "IPV4",   IPPROTO_IPIP,	ETHERTYPE_IP,	ipv4_header_finish },
 	{ "IPV6",   IPPROTO_IPV6,	ETHERTYPE_IPV6, ipv6_header_finish },
 	{ "GRE",    IPPROTO_GRE,	0,		gre_header_finish },
+	{ "MPLS",   0,			ETHERTYPE_MPLS_UC, mpls_header_finish },
 	{ "TCP",    IPPROTO_TCP,	0,		NULL },
 	{ "UDP",    IPPROTO_UDP,	0,		NULL },
 	{ "ICMPV4", IPPROTO_ICMP,	0,		NULL },
