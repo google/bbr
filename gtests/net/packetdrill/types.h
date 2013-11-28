@@ -122,8 +122,8 @@ enum ip_ecn_t {
 	ECN_NOCHECK,
 };
 
-/* Length of output buffer for inet_ntop. */
-#define ADDR_STR_LEN ((INET_ADDRSTRLEN + INET6_ADDRSTRLEN)+1)
+/* Length of output buffer for inet_ntop, plus prefix length (e.g. "/128"). */
+#define ADDR_STR_LEN ((INET_ADDRSTRLEN + INET6_ADDRSTRLEN)+5)
 
 /* Flavors of IP versions we support. */
 enum ip_version_t {

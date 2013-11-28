@@ -10,7 +10,8 @@ lexer.o: lexer.l parser.o
 	flex -olexer.c lexer.l
 	$(CC) -O2 -g -Wall -c lexer.c
 
-packetdrill-lib := checksum.o code.o config.o hash.o hash_map.o ip_address.o \
+packetdrill-lib := \
+         checksum.o code.o config.o hash.o hash_map.o ip_address.o ip_prefix.o \
          netdev.o net_utils.o \
          packet.o packet_socket_linux.o packet_socket_pcap.o \
          packet_checksum.o packet_parser.o packet_to_string.o \

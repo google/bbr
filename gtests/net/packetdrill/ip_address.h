@@ -35,6 +35,7 @@ struct ip_address {
 	union {
 		struct in_addr v4;
 		struct in6_addr v6;
+		u8 bytes[16];
 	} ip;				/* IP address (network order) */
 };
 
