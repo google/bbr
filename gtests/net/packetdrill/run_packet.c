@@ -422,12 +422,13 @@ static int offset_sack_blocks(struct packet *packet,
 				return STATUS_ERR;
 			int i = 0;
 			for (i = 0; i < num_blocks; ++i) {
-				struct sack_block *block =
-				    option->data.sack.block + i;
-				block->left =
-				    htonl(ntohl(block->left) + ack_offset);
-				block->right =
-				    htonl(ntohl(block->right) + ack_offset);
+				u32 val;
+				val = ntohl(option->data.sack.block[i].left);
+				val += ack_offset;
+				option->data.sack.block[i].left = htonl(val);
+				val = ntohl(option->data.sack.block[i].right);
+				val += ack_offset;
+				option->data.sack.block[i].right = htonl(val);
 			}
 		}
 	}

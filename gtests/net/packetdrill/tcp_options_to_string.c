@@ -92,13 +92,11 @@ int tcp_options_to_string(struct packet *packet,
 				goto out;
 			int i = 0;
 			for (i = 0; i < num_blocks; ++i) {
-				const struct sack_block *block =
-				    option->data.sack.block + i;
 				if (i > 0)
 					fputc(' ', s);
 				fprintf(s, "%u:%u",
-					ntohl(block->left),
-					ntohl(block->right));
+					ntohl(option->data.sack.block[i].left),
+					ntohl(option->data.sack.block[i].right));
 			}
 			break;
 
