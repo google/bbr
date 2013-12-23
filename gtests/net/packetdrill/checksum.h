@@ -46,4 +46,9 @@ extern __be16 tcp_udp_v6_checksum(const struct in6_addr *src_ip,
 				  const struct in6_addr *dst_ip,
 				  u8 protocol, const void *payload, u32 len);
 
+/* SCTP ... */
+
+/* Calculates the CRC32C checksum used by SCTP (in network byte order). */
+extern __be32 sctp_crc32c(const void *packet, u32 len);
+
 #endif /* __CHECKSUM_H__ */

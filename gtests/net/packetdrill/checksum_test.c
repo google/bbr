@@ -28,6 +28,7 @@
 #include <assert.h>
 #include "ip.h"
 #include "ipv6.h"
+#include "sctp.h"
 #include "tcp.h"
 
 static void test_tcp_udp_v4_checksum(void)
@@ -112,10 +113,28 @@ static void test_ipv4_checksum(void)
 	assert(checksum == 0xf910);
 }
 
+static void test_sctp_crc32c(void)
+{
+	u8 data[] = {
+		0x07, 0xd0, 0xd6, 0x61, 0x11, 0x0c, 0xc5, 0x6c,
+		0xda, 0xd7, 0x37, 0x74, 0x06, 0x00, 0x00, 0x0f,
+		0x00, 0x0c, 0x00, 0x0b, 0x47, 0x6f, 0x6f, 0x64,
+		0x62, 0x79, 0x65, 0x00,
+	};
+	struct sctp_common_header *sctp_common_header;
+	u32 crc32c;
+
+	sctp_common_header = (struct sctp_common_header *)data;
+	sctp_common_header->crc32c = 0;
+	crc32c = ntohl(sctp_crc32c(data, sizeof(data)));
+	assert(crc32c == 0xdad73774);
+}
+
 int main(void)
 {
 	test_tcp_udp_v4_checksum();
 	test_tcp_udp_v6_checksum();
 	test_ipv4_checksum();
+	test_sctp_crc32c();
 	return 0;
 }
