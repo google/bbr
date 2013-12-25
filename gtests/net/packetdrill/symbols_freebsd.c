@@ -298,6 +298,8 @@ struct int_symbol platform_symbols_table[] = {
 	{ ENOTCAPABLE,                      "ENOTCAPABLE"                     },
 	{ ECAPMODE,                         "ECAPMODE"                        },
 
+	/* Sentinel marking the end of the table. */
+	{ 0, NULL },
 };
 
 struct int_symbol *platform_symbols(void)
