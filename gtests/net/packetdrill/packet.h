@@ -119,6 +119,15 @@ extern struct packet *packet_copy(struct packet *old_packet);
 /* Return the number of headers in the given packet. */
 extern int packet_header_count(const struct packet *packet);
 
+/* Return the inner-most header in the given packet. */
+static inline struct header *packet_inner_header(struct packet *packet)
+{
+	int num_headers = packet_header_count(packet);
+
+	assert(num_headers > 0);
+	return &packet->headers[num_headers - 1];
+}
+
 /* Attempt to append a new header to the given packet. Return a
  * pointer to the new header metadata, or NULL if we can't add the
  * header.
