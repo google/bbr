@@ -424,6 +424,59 @@ static void test_parse_icmpv4_packet(void)
 	packet_free(packet);
 }
 
+static void test_parse_icmpv6_packet(void)
+{
+	/* An ICMPv6 packet. */
+	u8 data[] = {
+		/* IP6 fd6b:6bbb:34a1::2 > fd6b:6bbb:34a1::1: ICMP6,
+		 *  echo request, seq 1, length 64
+		 */
+		/* IPv6: */
+		0x60, 0x00, 0x00, 0x00, 0x00, 0x40, 0x3a, 0x40,
+		0xfd, 0x6b, 0x6b, 0xbb, 0x34, 0xa1, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+		0xfd, 0x6b, 0x6b, 0xbb, 0x34, 0xa1, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+		/* ICMPv6: Echo Request */
+		0x80, 0x00, 0xb7, 0x44, 0x74, 0x7f, 0x00, 0x01,
+		0x08, 0xb7, 0xc9, 0x52, 0x4d, 0x1f, 0x0e, 0x00,
+		0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+		0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+		0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
+		0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37
+	};
+
+	struct packet *packet = packet_new(sizeof(data));
+
+	/* Populate and parse a packet */
+	memcpy(packet->buffer, data, sizeof(data));
+	char *error = NULL;
+	enum packet_parse_result_t result =
+		parse_packet(packet, sizeof(data), PACKET_LAYER_3_IP,
+				     &error);
+	assert(result == PACKET_OK);
+	assert(error == NULL);
+
+	struct ipv6 *expected_ipv6 = (struct ipv6 *)(packet->buffer);
+	struct icmpv6 *expected_icmpv6 = (struct icmpv6 *)(expected_ipv6 + 1);
+
+	assert(packet->ip_bytes		== sizeof(data));
+	assert(packet->ipv4		== NULL);
+	assert(packet->ipv6		== expected_ipv6);
+	assert(packet->tcp		== NULL);
+	assert(packet->udp		== NULL);
+	assert(packet->icmpv4		== NULL);
+	assert(packet->icmpv6		== expected_icmpv6);
+
+	assert(packet->time_usecs	== 0);
+	assert(packet->flags		== 0);
+	assert(packet->ecn		== 0);
+
+	packet_free(packet);
+}
+
 int main(void)
 {
 	test_parse_tcp_ipv4_packet();
@@ -433,5 +486,6 @@ int main(void)
 	test_parse_ipv4_gre_ipv4_tcp_packet();
 	test_parse_ipv4_gre_mpls_ipv4_tcp_packet();
 	test_parse_icmpv4_packet();
+	test_parse_icmpv6_packet();
 	return 0;
 }
