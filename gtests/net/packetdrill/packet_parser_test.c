@@ -382,6 +382,48 @@ static void test_parse_ipv4_gre_mpls_ipv4_tcp_packet(void)
 	packet_free(packet);
 }
 
+static void test_parse_icmpv4_packet(void)
+{
+	/* An ICMPv4 packet. */
+	u8 data[] = {
+		/* 192.168.1.101:0 > 192.168.1.103:0
+		 * icmpv4 echo request, id 10960, seq 1, length 8
+		 */
+		0x45, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x40, 0x00,
+		0x40, 0x01, 0xb6, 0xc4, 0xc0, 0xa8, 0x01, 0x65,
+		0xc0, 0xa8, 0x01, 0x67, 0x08, 0x00, 0xcd, 0x2e,
+		0x2a, 0xd0, 0x00, 0x01,
+	};
+
+	struct packet *packet = packet_new(sizeof(data));
+
+	/* Populate and parse a packet */
+	memcpy(packet->buffer, data, sizeof(data));
+	char *error = NULL;
+	enum packet_parse_result_t result =
+		parse_packet(packet, sizeof(data), PACKET_LAYER_3_IP,
+				     &error);
+	assert(result == PACKET_OK);
+	assert(error == NULL);
+
+	struct ipv4 *expected_ipv4 = (struct ipv4 *)(packet->buffer);
+	struct icmpv4 *expected_icmpv4 = (struct icmpv4 *)(expected_ipv4 + 1);
+
+	assert(packet->ip_bytes		== sizeof(data));
+	assert(packet->ipv4		== expected_ipv4);
+	assert(packet->ipv6		== NULL);
+	assert(packet->tcp		== NULL);
+	assert(packet->udp		== NULL);
+	assert(packet->icmpv4		== expected_icmpv4);
+	assert(packet->icmpv6		== NULL);
+
+	assert(packet->time_usecs	== 0);
+	assert(packet->flags		== 0);
+	assert(packet->ecn		== 0);
+
+	packet_free(packet);
+}
+
 int main(void)
 {
 	test_parse_tcp_ipv4_packet();
@@ -390,5 +432,6 @@ int main(void)
 	test_parse_udp_ipv6_packet();
 	test_parse_ipv4_gre_ipv4_tcp_packet();
 	test_parse_ipv4_gre_mpls_ipv4_tcp_packet();
+	test_parse_icmpv4_packet();
 	return 0;
 }
