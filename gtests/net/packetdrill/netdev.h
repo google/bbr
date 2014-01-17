@@ -88,6 +88,7 @@ static inline int netdev_receive(struct netdev *netdev,
  */
 extern int netdev_receive_loop(struct packet_socket *psock,
 			       enum packet_layer_t layer,
+			       enum direction_t direction,
 			       struct packet **packet,
 			       char **error);
 

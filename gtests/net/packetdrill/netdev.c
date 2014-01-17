@@ -371,11 +371,12 @@ static int local_netdev_receive(struct netdev *a_netdev,
 	DEBUGP("local_netdev_receive\n");
 
 	return netdev_receive_loop(netdev->psock, PACKET_LAYER_3_IP,
-				   packet, error);
+				   DIRECTION_OUTBOUND, packet, error);
 }
 
 int netdev_receive_loop(struct packet_socket *psock,
 			enum packet_layer_t layer,
+			enum direction_t direction,
 			struct packet **packet,
 			char **error)
 {
@@ -388,8 +389,7 @@ int netdev_receive_loop(struct packet_socket *psock,
 		*packet = packet_new(PACKET_READ_BYTES);
 
 		/* Sniff the next outbound packet from the kernel under test. */
-		if (packet_socket_receive(psock, DIRECTION_OUTBOUND,
-					  *packet, &in_bytes))
+		if (packet_socket_receive(psock, direction, *packet, &in_bytes))
 			continue;
 
 		result = parse_packet(*packet, in_bytes, layer, error);
