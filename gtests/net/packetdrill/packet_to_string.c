@@ -45,7 +45,7 @@ static void endpoints_to_string(FILE *s, const struct packet *packet)
 static void packet_buffer_to_string(FILE *s, struct packet *packet)
 {
 	char *hex = NULL;
-	hex_dump(packet->buffer, packet->ip_bytes, &hex);
+	hex_dump(packet->buffer, packet_end(packet) - packet->buffer, &hex);
 	fputc('\n', s);
 	fprintf(s, "%s", hex);
 	free(hex);
