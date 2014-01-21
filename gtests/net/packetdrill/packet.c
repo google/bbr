@@ -102,6 +102,7 @@ struct header *packet_append_header(struct packet *packet,
 {
 	struct header *header = NULL;
 	int num_headers = packet_header_count(packet);
+	int packet_bytes;
 
 	assert(num_headers <= PACKET_MAX_HEADERS);
 	if (num_headers == PACKET_MAX_HEADERS)
@@ -111,7 +112,8 @@ struct header *packet_append_header(struct packet *packet,
 
 	if (packet->ip_bytes + header_bytes > packet->buffer_bytes)
 		return NULL;
-	header->h.ptr = packet->buffer + packet->ip_bytes;
+	packet_bytes = packet->l2_header_bytes + packet->ip_bytes;
+	header->h.ptr = packet->buffer + packet_bytes;
 	packet->ip_bytes += header_bytes;
 
 	header->type = header_type;

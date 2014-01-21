@@ -71,6 +71,7 @@ static int parse_layer2_packet(struct packet *packet,
 	}
 	ether = (struct ether_header *)p;
 	p += sizeof(*ether);
+	packet->l2_header_bytes = sizeof(*ether);
 
 	return parse_layer3_packet_by_proto(packet, ntohs(ether->ether_type),
 					    p, packet_end, error);

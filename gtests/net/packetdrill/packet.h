@@ -69,7 +69,8 @@ static const int PACKET_READ_BYTES = 64 * 1024;
 struct packet {
 	u8 *buffer;		/* data buffer: full contents of packet */
 	u32 buffer_bytes;	/* bytes of space in data buffer */
-	u32 ip_bytes;		/* bytes on wire: outermost IP hdrs/payload */
+	u32 l2_header_bytes;	/* bytes in outer hardware/layer-2 header */
+	u32 ip_bytes;		/* bytes in outermost IP hdrs/payload */
 	enum direction_t direction;	/* direction packet is traveling */
 
 	/* Metadata about all the headers in the packet, including all
