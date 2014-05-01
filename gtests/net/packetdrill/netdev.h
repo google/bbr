@@ -90,6 +90,7 @@ extern int netdev_receive_loop(struct packet_socket *psock,
 			       enum packet_layer_t layer,
 			       enum direction_t direction,
 			       struct packet **packet,
+			       int *num_packets,
 			       char **error);
 
 /* Allocate and return a new netdev for purely local tests. */

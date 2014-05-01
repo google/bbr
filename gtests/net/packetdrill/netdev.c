@@ -363,25 +363,59 @@ static int local_netdev_send(struct netdev *a_netdev,
 	return STATUS_OK;
 }
 
+/* Read the given number of packets out of the tun device. We read
+ * these packets so that the kernel can exercise its normal code paths
+ * for packet transmit completion, since this code path may feed back
+ * to TCP behavior; e.g., see the Linux patch "tcp: avoid retransmits
+ * of TCP packets hanging in host queues".  We don't need to actually
+ * need the packet contents, but on Linux we need to read at least 1
+ * byte of packet data to consume the packet.
+ */
+static void local_netdev_read_queue(struct local_netdev *netdev,
+				    int num_packets)
+{
+	char buf[1];
+	int i = 0, in_bytes = 0;
+
+	for (i = 0; i < num_packets; ++i) {
+		in_bytes = read(netdev->tun_fd, buf, sizeof(buf));
+		assert(in_bytes <= (int)sizeof(buf));
+
+		if (in_bytes < 0) {
+			if (errno == EINTR)
+				continue;
+			else
+				die_perror("tun read()");
+		}
+       }
+}
+
 static int local_netdev_receive(struct netdev *a_netdev,
 				struct packet **packet, char **error)
 {
 	struct local_netdev *netdev = to_local_netdev(a_netdev);
+	int status = STATUS_ERR;
+	int num_packets = 0;
 
 	DEBUGP("local_netdev_receive\n");
 
-	return netdev_receive_loop(netdev->psock, PACKET_LAYER_3_IP,
-				   DIRECTION_OUTBOUND, packet, error);
+	status = netdev_receive_loop(netdev->psock, PACKET_LAYER_3_IP,
+				     DIRECTION_OUTBOUND, packet, &num_packets,
+				     error);
+	local_netdev_read_queue(netdev, num_packets);
+	return status;
 }
 
 int netdev_receive_loop(struct packet_socket *psock,
 			enum packet_layer_t layer,
 			enum direction_t direction,
 			struct packet **packet,
+			int *num_packets,
 			char **error)
 {
 	assert(*packet == NULL);	/* should be no packet yet */
 
+	*num_packets = 0;
 	while (1) {
 		int in_bytes = 0;
 		enum packet_parse_result_t result;
@@ -392,6 +426,7 @@ int netdev_receive_loop(struct packet_socket *psock,
 		if (packet_socket_receive(psock, direction, *packet, &in_bytes))
 			continue;
 
+		++*num_packets;
 		result = parse_packet(*packet, in_bytes, layer, error);
 
 		if (result == PACKET_OK)
