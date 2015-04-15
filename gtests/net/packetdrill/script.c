@@ -218,7 +218,7 @@ static int unescape_cstring_expression(const char *input_string,
 {
 	int bytes = strlen(input_string);
 	out->type = EXPR_STRING;
-	out->value.string = (char *)malloc(bytes);
+	out->value.string = (char *)calloc(1, bytes + 1);
 	const char *c_in = input_string;
 	char *c_out = out->value.string;
 	while (*c_in != '\0') {
