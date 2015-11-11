@@ -1,0 +1,6 @@
+// Test that we can cleanly handle expected errors from socket()
+
++0 socket(..., SOCK_STREAM, IPPROTO_UDP) = -1
+
+// Failure: runtime error in socket call: Expected non-negative result but got -1 with errno 93 \(Protocol not supported\)
++0 socket(..., SOCK_STREAM, IPPROTO_UDP) = 3

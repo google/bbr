@@ -512,7 +512,7 @@ static void begin_syscall(struct state *state, struct syscall_spec *syscall)
  */
 enum result_check_t {
 	CHECK_EXACT,		/* check that result matches exactly */
-	CHECK_NON_NEGATIVE,	/* check that result is non-negative */
+	CHECK_FD,		/* check that result is fd or matching error */
 };
 static int end_syscall(struct state *state, struct syscall_spec *syscall,
 		       enum result_check_t mode, int actual, char **error)
@@ -533,7 +533,7 @@ static int end_syscall(struct state *state, struct syscall_spec *syscall,
 	/* Compare actual vs expected return value */
 	if (get_s32(syscall->result, &expected, error))
 		return STATUS_ERR;
-	if (mode == CHECK_NON_NEGATIVE) {
+	if (mode == CHECK_FD && expected >= 0) {
 		if (actual < 0) {
 			asprintf(error,
 				 "Expected non-negative result but got %d "
@@ -541,7 +541,7 @@ static int end_syscall(struct state *state, struct syscall_spec *syscall,
 				 actual, actual_errno, strerror(actual_errno));
 			return STATUS_ERR;
 		}
-	} else if (mode == CHECK_EXACT) {
+	} else if (mode == CHECK_FD || mode == CHECK_EXACT) {
 		if (actual != expected) {
 			asprintf(error,
 				 "Expected result %d but got %d "
@@ -902,7 +902,7 @@ static int syscall_socket(struct state *state, struct syscall_spec *syscall,
 
 	result = socket(domain, type, protocol);
 
-	if (end_syscall(state, syscall, CHECK_NON_NEGATIVE, result, error))
+	if (end_syscall(state, syscall, CHECK_FD, result, error))
 		return STATUS_ERR;
 
 	if (result >= 0) {
@@ -994,7 +994,7 @@ static int syscall_accept(struct state *state, struct syscall_spec *syscall,
 
 	result = accept(live_fd, (struct sockaddr *)&live_addr, &live_addrlen);
 
-	if (end_syscall(state, syscall, CHECK_NON_NEGATIVE, result, error))
+	if (end_syscall(state, syscall, CHECK_FD, result, error))
 		return STATUS_ERR;
 
 	if (result >= 0) {
@@ -1719,7 +1719,7 @@ static int syscall_open(struct state *state, struct syscall_spec *syscall,
 
 	result = open(name, flags);
 
-	if (end_syscall(state, syscall, CHECK_NON_NEGATIVE, result, error))
+	if (end_syscall(state, syscall, CHECK_FD, result, error))
 		return STATUS_ERR;
 
 	if (result >= 0) {

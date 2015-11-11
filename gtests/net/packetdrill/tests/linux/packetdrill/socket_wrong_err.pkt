@@ -1,0 +1,4 @@
+// Test that we can recognize unexpected errors from socket()
+
+// Failure: runtime error in socket call: Expected result -99 but got -1 with errno 93 \(Protocol not supported\)
++0 socket(..., SOCK_STREAM, IPPROTO_UDP) = -99
