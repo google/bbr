@@ -146,3 +146,6 @@ x509.genkey
 
 # Clang's compilation database file
 /compile_commands.json
+
+# tmp build/install directory for /gce-install.sh:
+/gce/
