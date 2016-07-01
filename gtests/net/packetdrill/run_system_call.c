@@ -628,30 +628,31 @@ static int to_live_fd(struct state *state, int script_fd, int *live_fd,
  * Returns STATUS_OK on success; on failure returns STATUS_ERR and
  * sets error message.
  */
-static int run_syscall_socket(struct state *state, int address_family,
-			      int protocol, int script_fd, int live_fd,
-			      char **error)
+static struct socket *insert_new_socket(
+	struct state *state, int address_family, int protocol,
+	int script_fd, int live_fd, char **error)
 {
 	/* Validate fd values. */
 	if (script_fd < 0) {
 		asprintf(error, "invalid socket fd %d in script", script_fd);
-		return STATUS_ERR;
+		return NULL;
 	}
 	if (live_fd < 0) {
 		asprintf(error, "invalid live socket fd %d", live_fd);
-		return STATUS_ERR;
+		return NULL;
 	}
 
 	/* Look for sockets with conflicting fds. Should not happen if
-	   the script is valid and this program is bug-free. */
+	 * the script is valid and this program is bug-free.
+	 */
 	if (find_socket_by_script_fd(state, script_fd)) {
 		asprintf(error, "duplicate socket fd %d in script",
 			 script_fd);
-		return STATUS_ERR;
+		return NULL;
 	}
 	if (find_socket_by_live_fd(state, live_fd)) {
 		asprintf(error, "duplicate live socket fd %d", live_fd);
-		return STATUS_ERR;
+		return NULL;
 	}
 
 	/* These fd values are kosher, so store them. */
@@ -661,6 +662,19 @@ static int run_syscall_socket(struct state *state, int address_family,
 	socket->protocol	= protocol;
 	socket->script.fd	= script_fd;
 	socket->live.fd		= live_fd;
+
+	return socket;
+}
+
+static int run_syscall_socket(struct state *state, int address_family,
+			      int protocol, int script_fd, int live_fd,
+			      char **error)
+{
+	struct socket *socket = insert_new_socket(state, address_family,
+						  protocol, script_fd, live_fd,
+						  error);
+	if (socket == NULL)
+		return STATUS_ERR;
 
 	/* Any later packets in the test script will now be mapped here. */
 	state->socket_under_test = socket;
@@ -1682,6 +1696,42 @@ error_out:
 	return status;
 }
 
+static int syscall_open(struct state *state, struct syscall_spec *syscall,
+			struct expression_list *args, char **error)
+{
+	int script_fd, live_fd, result;
+	struct expression *name_expression;
+	char *name;
+	int flags;
+
+	if (check_arg_count(args, 2, error))
+		return STATUS_ERR;
+	name_expression = get_arg(args, 0, error);
+	if (check_type(name_expression, EXPR_STRING, error))
+		return STATUS_ERR;
+	name = name_expression->value.string;
+	if (s32_arg(args, 1, &flags, error))
+		return STATUS_ERR;
+
+	begin_syscall(state, syscall);
+
+	result = open(name, flags);
+
+	if (end_syscall(state, syscall, CHECK_NON_NEGATIVE, result, error))
+		return STATUS_ERR;
+
+	if (result >= 0) {
+		live_fd = result;
+		if (get_s32(syscall->result, &script_fd, error))
+			return STATUS_ERR;
+		if (!insert_new_socket(state, 0, 0,
+				       script_fd, live_fd, error))
+			return STATUS_ERR;
+	}
+
+	return STATUS_OK;
+}
+
 /* A dispatch table with all the system calls that we support... */
 struct system_call_entry {
 	const char *name;
@@ -1713,6 +1763,7 @@ struct system_call_entry system_call_table[] = {
 	{"getsockopt", syscall_getsockopt},
 	{"setsockopt", syscall_setsockopt},
 	{"poll",       syscall_poll},
+	{"open",       syscall_open},
 };
 
 /* Evaluate the system call arguments and invoke the system call. */
