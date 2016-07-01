@@ -1,5 +1,6 @@
 /*
  * Copyright 2013 Google Inc.
+ * Copyright 2016 Red Hat Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -39,6 +40,7 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <sys/sendfile.h>
 #include <time.h>
 #include <unistd.h>
 #include "logging.h"
@@ -1732,6 +1734,42 @@ static int syscall_open(struct state *state, struct syscall_spec *syscall,
 	return STATUS_OK;
 }
 
+static int syscall_sendfile(struct state *state, struct syscall_spec *syscall,
+			    struct expression_list *args, char **error)
+{
+	int live_outfd, script_outfd;
+	int live_infd, script_infd;
+	int script_offset = 0;
+	off_t live_offset;
+	int count, result;
+	int status = STATUS_ERR;
+
+	if (check_arg_count(args, 4, error))
+		return STATUS_ERR;
+	if (s32_arg(args, 0, &script_outfd, error))
+		return STATUS_ERR;
+	if (to_live_fd(state, script_outfd, &live_outfd, error))
+		return STATUS_ERR;
+	if (s32_arg(args, 1, &script_infd, error))
+		return STATUS_ERR;
+	if (to_live_fd(state, script_infd, &live_infd, error))
+		return STATUS_ERR;
+	if (s32_bracketed_arg(args, 2, &script_offset, error))
+		return STATUS_ERR;
+	if (s32_arg(args, 3, &count, error))
+		return STATUS_ERR;
+
+	live_offset = script_offset;
+
+	begin_syscall(state, syscall);
+
+	result = sendfile(live_outfd, live_infd, &live_offset, count);
+
+	status = end_syscall(state, syscall, CHECK_EXACT, result, error);
+
+	return status;
+}
+
 /* A dispatch table with all the system calls that we support... */
 struct system_call_entry {
 	const char *name;
@@ -1764,6 +1802,7 @@ struct system_call_entry system_call_table[] = {
 	{"setsockopt", syscall_setsockopt},
 	{"poll",       syscall_poll},
 	{"open",       syscall_open},
+	{"sendfile",   syscall_sendfile},
 };
 
 /* Evaluate the system call arguments and invoke the system call. */
