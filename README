@@ -1,0 +1,14 @@
+This open source distribution contains documentation, scripts, and
+other materials related to the BBR congestion control algorithm.
+
+The first public release of BBR was here, in September 2016:
+
+http://git.kernel.org/cgit/linux/kernel/git/davem/net-next.git/commit/?id=0f8782ea14974ce992618b55f0c041ef43ed0b78
+
+Test results, performance evaluations, feedback, and BBR-related
+discussions are very welcome in the public e-mail list for BBR:
+
+  https://groups.google.com/forum/#!forum/bbr-dev
+
+
+This is not an official Google product.
