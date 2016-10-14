@@ -31,13 +31,13 @@ high-cpu instance with SSD disks to compile our kernel:
 
 ```
 gcloud compute \
-  instances create "bbrtest" \
+  instances create "bbrtest1" \
   --project ${PROJECT} --zone ${ZONE} \
-  --machine-type "n1-highcpu-8" \
+  --machine-type "n1-standard-8" \
   --network "default" \
   --maintenance-policy "MIGRATE" \
-  --boot-disk-type "pd-ssd" \
-  --boot-disk-device-name "bbrtest" \
+  --boot-disk-type "pd-standard" \
+  --boot-disk-device-name "bbrtest1" \
   --image "/ubuntu-os-cloud/ubuntu-1604-xenial-v20160922" \
   --boot-disk-size "20" \
   --scopes default="https://www.googleapis.com/auth/devstorage.read_only","https://www.googleapis.com/auth/logging.write","https://www.googleapis.com/auth/monitoring.write","https://www.googleapis.com/auth/servicecontrol","https://www.googleapis.com/auth/service.management.readonly"
@@ -47,7 +47,7 @@ After creating the instance; log in:
 
 
 ```
-gcloud compute ssh --project ${PROJECT} --zone ${ZONE} bbrtest
+gcloud compute ssh --project ${PROJECT} --zone ${ZONE} bbrtest1
 
 ```
 
@@ -61,12 +61,10 @@ sudo apt-get build-dep linux
 sudo apt-get upgrade
 ```
 
-## Obtain kernel sources with BBR
+## Obtain kernel sources with TCP BBR
 
 Since BBR was only recently contributed to Linux, we'll need to compile a
-development kernel that includes this feature. It is also important that we
-follow the
-[kernel/image requirements for GCE](https://cloud.google.com/compute/docs/tutorials/building-images).
+development kernel that includes this feature.
 
 For this guide, we'll grab the Linux networking development branch
 `davem/net-next` from `git.kernel.org`. First, let's prepare to clone the
@@ -87,28 +85,19 @@ cd /usr/src/net-next
 
 ## Configure the kernel
 
-Covering the details of kernel-configuration for
-GCE is beyond the scope of this document.  Ensure you
-have a kernel configuration compatible with GCE. This is
-documeneted in detail at [Building a Compute Engine Image From Scratch](https://cloud.google.com/compute/docs/tutorials/building-images).
-
-Then ensure the options `CONFIG_TCP_CONG_BBR` and `CONFIG_NET_SCH_FQ` are
-enabled for this kernel:
-
-
-```
-egrep '(CONFIG_TCP_CONG_BBR|CONFIG_NET_SCH_FQ)=' .config
-
-CONFIG_TCP_CONG_BBR=y
-CONFIG_NET_SCH_FQ=y
-
-```
-
 If you do not yet have a kernel config for GCE, you can try the [config included
 in this tutorial](config.gce). You can copy it to your test machine with:
 
 ```
-gcloud compute copy-files --project ${PROJECT} --zone ${ZONE}  config.gce $USER@bbrtest:/usr/src/net-next/
+gcloud compute copy-files --project ${PROJECT} --zone ${ZONE}  config.gce $USER@bbrtest1:/usr/src/net-next/.config
+```
+
+Then, on your GCE instance, update the config to select the defaults for any
+new config options added recently:
+
+```
+cd /usr/src/net-next
+make olddefconfig
 ```
 
 ## Compile the kernel
@@ -117,7 +106,6 @@ Compile the kernel:
 
 ```
 cd /usr/src/net-next
-mv config.gce .config
 make prepare
 make -j`nproc`
 make -j`nproc` modules
@@ -138,7 +126,8 @@ sudo bash -c 'echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf'
 Install the kernel on this machine, and reboot:
 
 ```
-sudo make modules_install install
+cd /usr/src/net-next
+sudo make -j`nproc` modules_install install
 sudo reboot now
 ```
 
@@ -147,8 +136,8 @@ sudo reboot now
 Confirm that you have booted the kernel we compiled; I get this result:
 
 ```
-ncardwell@bbrtest:~$ uname -a
-Linux bbrtest 4.8.0-rc7+ #1 SMP Thu Sep 29 20:06:31 UTC 2016 x86_64 x86_64 x86_64 GNU/Linux
+ncardwell@bbrtest1:~$ uname -a
+Linux bbrtest1 4.8.0-rc7+ #1 SMP Thu Sep 29 20:06:31 UTC 2016 x86_64 x86_64 x86_64 GNU/Linux
 ```
 
 Confirm that the fq qdisc is installed:
@@ -164,3 +153,24 @@ sysctl net.ipv4.tcp_congestion_control
 ```
 
 Enjoy!
+
+## Further reading
+
+If you already have a kernel config for GCE, then you can enable BBR and
+FQ. Check that if you run:
+
+```
+egrep '(CONFIG_TCP_CONG_BBR|CONFIG_NET_SCH_FQ)=' .config
+```
+
+then you see exactly the following lines:
+
+```
+CONFIG_TCP_CONG_BBR=y
+CONFIG_NET_SCH_FQ=y
+
+```
+
+If you want to create your own .config, then just remember to include those two
+lines, and follow the
+[kernel/image requirements for GCE](https://cloud.google.com/compute/docs/tutorials/building-images).
