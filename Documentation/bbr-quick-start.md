@@ -83,9 +83,14 @@ cd /usr/src/net-next
 
 ## Configure the kernel
 
-If you do not yet have a kernel config for GCE, you can try the
-[config included in this tutorial](config.gce). You can copy it to your GCE
-instance from your local host with:
+If you do not yet have a Linux kernel config for GCE, you can try the
+[config included in this tutorial](https://raw.githubusercontent.com/google/bbr/master/Documentation/config.gce). You can download that kernel config with:
+
+```
+wget  https://raw.githubusercontent.com/google/bbr/master/Documentation/config.gce
+```
+
+You can copy that kernel config to your GCE instance from your local host with:
 
 ```
 gcloud compute copy-files --project ${PROJECT} --zone ${ZONE}  config.gce $USER@bbrtest1:/usr/src/net-next/.config
