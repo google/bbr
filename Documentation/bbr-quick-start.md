@@ -51,8 +51,8 @@ gcloud compute ssh --project ${PROJECT} --zone ${ZONE} bbrtest1
 
 ```
 
-Use apt(8) to install the packages necessary to build a kernel (answer `Y` and
-press `Enter` when prompted by `apt-get`):
+Then, on your GCE instance, use apt(8) to install the packages necessary to
+build a kernel (answer `Y` and press `Enter` when prompted by `apt-get`):
 
 
 ```
@@ -67,26 +67,25 @@ Since BBR was only recently contributed to Linux, we'll need to compile a
 development kernel that includes this feature.
 
 For this guide, we'll grab the Linux networking development branch
-`davem/net-next` from `git.kernel.org`. First, let's prepare to clone the
-sources into /usr/src/net-next and do the configuration and compliation
-as a mortal (non-root) user.
+`davem/net-next` from `git.kernel.org`.
+
+On your GCE instance, use `git` to clone the Linux sources into
+/usr/src/net-next and do the configuration and compliation as a mortal
+(non-root) user:
 
 ```
-# Make /usr/src writeable/sticky like /tmp
+# Make /usr/src writeable/sticky like /tmp:
 cd /usr/src && sudo chmod 1777 .
-```
-
-Using `git`, clone a copy of the kernel sources:
-
-```
+# Clone a copy of the kernel sources:
 git clone git://git.kernel.org/pub/scm/linux/kernel/git/davem/net-next.git
 cd /usr/src/net-next
 ```
 
 ## Configure the kernel
 
-If you do not yet have a kernel config for GCE, you can try the [config included
-in this tutorial](config.gce). You can copy it to your test machine with:
+If you do not yet have a kernel config for GCE, you can try the
+[config included in this tutorial](config.gce). You can copy it to your GCE
+instance from your local host with:
 
 ```
 gcloud compute copy-files --project ${PROJECT} --zone ${ZONE}  config.gce $USER@bbrtest1:/usr/src/net-next/.config
@@ -102,7 +101,7 @@ make olddefconfig
 
 ## Compile the kernel
 
-Compile the kernel:
+Compile the kernel, on your GCE instance:
 
 ```
 cd /usr/src/net-next
@@ -113,8 +112,8 @@ make -j`nproc` modules
 
 ## Configure the machine
 
-Configure the machine, changing the default qdisc to fq, and default TCP
-congestion control to BBR:
+On your GCE instance, configure the system, changing the default qdisc to fq,
+and default TCP congestion control to BBR:
 
 ```
 sudo bash -c 'echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf'
@@ -123,7 +122,7 @@ sudo bash -c 'echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf'
 
 ##  Install the kernel and reboot
 
-Install the kernel on this machine, and reboot:
+On your GCE instance, install the newly-compiled kernel and reboot:
 
 ```
 cd /usr/src/net-next
@@ -133,22 +132,24 @@ sudo reboot now
 
 ## Verify the kernel and configuration
 
-Confirm that you have booted the kernel we compiled; I get this result:
+On your GCE instance, confirm that it has booted the kernel we compiled:
 
 ```
-ncardwell@bbrtest1:~$ uname -a
+uname -a
+```
+
+That should show something like the following, except with a version number and
+build timestamp matching the kernel you compiled above:
+
+```
 Linux bbrtest1 4.8.0-rc7+ #1 SMP Thu Sep 29 20:06:31 UTC 2016 x86_64 x86_64 x86_64 GNU/Linux
 ```
 
-Confirm that the fq qdisc is installed:
+Finally, on your GCE instance, confirm that the fq qdisc is installed and that
+BBR is being used:
 
 ```
 tc qdisc show
-```
-
-Confirm that BBR is being used:
-
-```
 sysctl net.ipv4.tcp_congestion_control
 ```
 
@@ -157,9 +158,10 @@ Enjoy!
 ## Further reading
 
 If you already have a kernel config for GCE, then you can enable BBR and
-FQ. Check that if you run:
+FQ. On your GCE instance, check that if you run:
 
 ```
+cd /usr/src/net-next
 egrep '(CONFIG_TCP_CONG_BBR|CONFIG_NET_SCH_FQ)=' .config
 ```
 
