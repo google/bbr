@@ -79,6 +79,8 @@ static void bind_to_interface(int fd, int interface_index)
  */
 static void packet_socket_setup(struct packet_socket *psock)
 {
+	struct timeval tv;
+
 	psock->packet_fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 	if (psock->packet_fd < 0)
 		die_perror("socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL))");
@@ -91,6 +93,11 @@ static void packet_socket_setup(struct packet_socket *psock)
 	bind_to_interface(psock->packet_fd, psock->index);
 
 	set_receive_buffer_size(psock->packet_fd, PACKET_SOCKET_RCVBUF_BYTES);
+
+	/* Pay the non-trivial latency cost to enable timestamps now, before
+	 * the test starts, to avoid significant delays in the middle of tests.
+	 */
+	ioctl(psock->packet_fd, SIOCGSTAMP, &tv);
 }
 
 /* Add a filter so we only sniff packets we want. */
