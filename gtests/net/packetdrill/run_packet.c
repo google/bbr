@@ -476,6 +476,7 @@ static int map_inbound_icmp_packet(
  * on failure returns STATUS_ERR and sets error message.
  */
 static int map_inbound_packet(
+	struct state *state,
 	struct socket *socket, struct packet *live_packet, char **error)
 {
 	DEBUGP("map_inbound_packet\n");
@@ -484,6 +485,8 @@ static int map_inbound_packet(
 	struct tuple live_inbound;
 	socket_get_inbound(&socket->live, &live_inbound);
 	set_packet_tuple(live_packet, &live_inbound);
+
+	live_packet->mss = state->config->mss;
 
 	if ((live_packet->icmpv4 != NULL) || (live_packet->icmpv6 != NULL))
 		return map_inbound_icmp_packet(socket, live_packet, error);
@@ -1292,7 +1295,7 @@ static int do_inbound_script_packet(
 	/* Start with a bit-for-bit copy of the packet from the script. */
 	struct packet *live_packet = packet_copy(packet);
 	/* Map packet fields from script values to live values. */
-	if (map_inbound_packet(socket, live_packet, error))
+	if (map_inbound_packet(state, socket, live_packet, error))
 		goto out;
 
 	verbose_packet_dump(state, "inbound injected", live_packet,

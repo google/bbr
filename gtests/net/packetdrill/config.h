@@ -73,6 +73,7 @@ struct config {
 	u32 speed;			/* speed reported by tun driver;
 					 * may require special tun driver
 					 */
+	int mss;			/* gso_size for GRO packets to tun device */
 	int mtu;			/* MTU of tun device */
 
 	bool non_fatal_packet;		/* treat packet asserts as non-fatal */

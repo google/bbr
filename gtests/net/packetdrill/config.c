@@ -46,6 +46,7 @@ enum option_codes {
 	OPT_GATEWAY_IP,
 	OPT_NETMASK_IP,
 	OPT_SPEED,
+	OPT_MSS,
 	OPT_MTU,
 	OPT_INIT_SCRIPTS,
 	OPT_TOLERANCE_USECS,
@@ -74,6 +75,7 @@ struct option options[] = {
 	{ "gateway_ip",		.has_arg = true,  NULL, OPT_GATEWAY_IP },
 	{ "netmask_ip",		.has_arg = true,  NULL, OPT_NETMASK_IP },
 	{ "speed",		.has_arg = true,  NULL, OPT_SPEED },
+	{ "mss",		.has_arg = true,  NULL, OPT_MSS },
 	{ "mtu",		.has_arg = true,  NULL, OPT_MTU },
 	{ "init_scripts",	.has_arg = true,  NULL, OPT_INIT_SCRIPTS },
 	{ "tolerance_usecs",	.has_arg = true,  NULL, OPT_TOLERANCE_USECS },
@@ -105,6 +107,7 @@ void show_usage(void)
 		"\t[--netmask_ip=netmask_ip]\n"
 		"\t[--init_scripts=<comma separated filenames>]\n"
 		"\t[--speed=<speed in Mbps>]\n"
+		"\t[--mss=<MSS in bytes>]\n"
 		"\t[--mtu=<MTU in bytes>]\n"
 		"\t[--tolerance_usecs=tolerance_usecs]\n"
 		"\t[--tcp_ts_tick_usecs=<microseconds per TCP TS val tick>]\n"
@@ -391,6 +394,11 @@ static void process_option(int opt, char *optarg, struct config *config,
 		break;
 	case OPT_GATEWAY_IP:
 		strncpy(config->live_gateway_ip_string, optarg, ADDR_STR_LEN-1);
+		break;
+	case OPT_MSS:
+		config->mss = atoi(optarg);
+		if (config->mss <= 0)
+			die("%s: bad --mss: %s\n", where, optarg);
 		break;
 	case OPT_MTU:
 		config->mtu = atoi(optarg);

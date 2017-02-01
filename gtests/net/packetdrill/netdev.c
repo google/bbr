@@ -125,7 +125,7 @@ static void create_device(struct config *config, struct local_netdev *netdev)
 	 */
 	struct ifreq ifr;
 	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+	ifr.ifr_flags = IFF_TUN | IFF_NO_PI | IFF_VNET_HDR;
 	int status = ioctl(netdev->tun_fd, TUNSETIFF, (void *)&ifr);
 	if (status < 0)
 		die_perror("TUNSETIFF");
@@ -331,10 +331,25 @@ static void bsd_tun_write(struct local_netdev *netdev,
 #endif /* defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) */
 
 #ifdef linux
+#include <linux/virtio_net.h>
+
 static void linux_tun_write(struct local_netdev *netdev,
 			    struct packet *packet)
 {
-	if (write(netdev->tun_fd, packet_start(packet), packet->ip_bytes) < 0)
+	struct virtio_net_hdr gso = { 0 };
+	struct iovec vector[2] = {
+		{ &gso, sizeof(gso) },
+		{ packet_start(packet), packet->ip_bytes }
+	};
+
+	if (packet->tcp && packet->mss) {
+		if (packet->ipv4)
+			gso.gso_type = VIRTIO_NET_HDR_GSO_TCPV4;
+		else
+			gso.gso_type = VIRTIO_NET_HDR_GSO_TCPV6;
+		gso.gso_size = packet->mss;
+	}
+	if (writev(netdev->tun_fd, vector, ARRAY_SIZE(vector)) < 0)
 		die_perror("Linux tun write()");
 }
 #endif  /* linux */
@@ -370,11 +385,17 @@ static int local_netdev_send(struct netdev *a_netdev,
  * of TCP packets hanging in host queues".  We don't need to actually
  * need the packet contents, but on Linux we need to read at least 1
  * byte of packet data to consume the packet.
+ * After we added IFF_VNET_HDR attribute to the linux tun device,
+ * we expect to receive a virtio_net_hdr at the beginning.
  */
 static void local_netdev_read_queue(struct local_netdev *netdev,
 				    int num_packets)
 {
+#ifdef linux
+	char buf[sizeof(struct virtio_net_hdr) + 1];
+#else
 	char buf[1];
+#endif
 	int i = 0, in_bytes = 0;
 
 	for (i = 0; i < num_packets; ++i) {

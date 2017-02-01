@@ -106,6 +106,7 @@ struct packet {
 
 	__be32 *tcp_ts_val;	/* location of TCP timestamp val, or NULL */
 	__be32 *tcp_ts_ecr;	/* location of TCP timestamp ecr, or NULL */
+	int	mss;
 };
 
 /* Allocate and initialize a packet. */
