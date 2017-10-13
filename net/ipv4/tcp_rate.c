@@ -84,6 +84,7 @@ void tcp_rate_skb_sent(struct sock *sk, struct sk_buff *skb)
 	TCP_SKB_CB(skb)->tx.delivered_mstamp	= tp->delivered_mstamp;
 	TCP_SKB_CB(skb)->tx.delivered		= tp->delivered;
 	TCP_SKB_CB(skb)->tx.delivered_ce	= tp->delivered_ce;
+	TCP_SKB_CB(skb)->tx.lost		= tp->lost;
 	TCP_SKB_CB(skb)->tx.is_app_limited	= tp->app_limited ? 1 : 0;
 	tcp_set_tx_in_flight(sk, skb);
 }
@@ -110,6 +111,7 @@ void tcp_rate_skb_delivered(struct sock *sk, struct sk_buff *skb,
 	if (!rs->prior_delivered ||
 	    tcp_skb_sent_after(tx_tstamp, tp->first_tx_mstamp,
 			       scb->end_seq, rs->last_end_seq)) {
+		rs->prior_lost	     = scb->tx.lost;
 		rs->prior_delivered_ce  = scb->tx.delivered_ce;
 		rs->prior_delivered  = scb->tx.delivered;
 		rs->prior_mstamp     = scb->tx.delivered_mstamp;
@@ -165,6 +167,7 @@ void tcp_rate_gen(struct sock *sk, u32 delivered, u32 lost,
 		return;
 	}
 	rs->delivered   = tp->delivered - rs->prior_delivered;
+	rs->lost        = tp->lost - rs->prior_lost;
 
 	rs->delivered_ce = tp->delivered_ce - rs->prior_delivered_ce;
 	/* delivered_ce occupies less than 32 bits in the skb control block */
