@@ -50,6 +50,7 @@ enum option_codes {
 	OPT_MTU,
 	OPT_INIT_SCRIPTS,
 	OPT_TOLERANCE_USECS,
+	OPT_TOLERANCE_PERCENT,
 	OPT_WIRE_CLIENT,
 	OPT_WIRE_SERVER,
 	OPT_WIRE_SERVER_IP,
@@ -86,6 +87,7 @@ struct option options[] = {
 	{ "mtu",		.has_arg = true,  NULL, OPT_MTU },
 	{ "init_scripts",	.has_arg = true,  NULL, OPT_INIT_SCRIPTS },
 	{ "tolerance_usecs",	.has_arg = true,  NULL, OPT_TOLERANCE_USECS },
+	{ "tolerance_percent",  .has_arg = true,  NULL, OPT_TOLERANCE_PERCENT },
 	{ "wire_client",	.has_arg = false, NULL, OPT_WIRE_CLIENT },
 	{ "wire_server",	.has_arg = false, NULL, OPT_WIRE_SERVER },
 	{ "wire_server_ip",	.has_arg = true,  NULL, OPT_WIRE_SERVER_IP },
@@ -124,6 +126,7 @@ void show_usage(void)
 		"\t[--mss=<MSS in bytes>\n"
 		"\t[--mtu=<MTU in bytes>\n"
 		"\t[--tolerance_usecs=tolerance_usecs]\n"
+		"\t[--tolerance_percent=percentage]\n"
 		"\t[--tcp_ts_ecr_scaled]\n"
 		"\t[--tcp_ts_tick_usecs=<microseconds per TCP TS val tick>]\n"
 		"\t[--strict_segments]\n"
@@ -224,6 +227,7 @@ void set_default_config(struct config *config)
 	config->ip_version		= IP_VERSION_4;
 	config->live_bind_port		= 8080;
 	config->live_connect_port	= 8080;
+	config->tolerance_percent	= 0.5; /* 5ms / second */
 	config->tolerance_usecs		= 4000;
 	config->speed			= TUN_DRIVER_SPEED_CUR;
 	config->mtu			= TUN_DRIVER_DEFAULT_MTU;
@@ -448,9 +452,14 @@ static void process_option(int opt, char *optarg, struct config *config,
 		config->speed = speed;
 		break;
 	case OPT_TOLERANCE_USECS:
-		config->tolerance_usecs = atoi(optarg);
+		config->tolerance_usecs = atol(optarg);
 		if (config->tolerance_usecs <= 0)
 			die("%s: bad --tolerance_usecs: %s\n", where, optarg);
+		break;
+	case OPT_TOLERANCE_PERCENT:
+		config->tolerance_percent = atof(optarg);
+		if (config->tolerance_percent < 0.0 || config->tolerance_percent > 100.0)
+			die("%s: bad --tolerance_percent: %s\n", where, optarg);
 		break;
 	case OPT_TCP_TS_ECR_SCALED:
 		config->tcp_ts_ecr_scaled = true;

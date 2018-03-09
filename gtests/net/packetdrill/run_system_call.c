@@ -3515,6 +3515,7 @@ static void *system_call_thread(void *arg)
 						event->time_type,
 						syscall->end_usecs, 0,
 						state->syscalls->live_end_usecs,
+						state->last_event,
 						"system call return", &error)) {
 				die("%s:%d: %s\n",
 				    state->config->script_path,

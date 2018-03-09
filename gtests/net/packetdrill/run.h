@@ -167,7 +167,8 @@ static inline s64 live_time_to_script_time_usecs(struct state *state,
  */
 extern int verify_time(struct state *state, enum event_time_t time_type,
 		       s64 script_usecs, s64 script_usecs_end,
-		       s64 live_usecs, const char *description, char **error);
+		       s64 live_usecs, struct event *last_event,
+		       const char *description, char **error);
 extern void check_event_time(struct state *state, s64 live_usecs);
 
 /* Set the start (and end time, if applicable) for the event if it

@@ -113,7 +113,9 @@ struct config {
 
 	int live_prefix_len;		/* IPv4/IPv6 interface prefix len */
 
-	int tolerance_usecs;		/* tolerance for time divergence */
+	long tolerance_usecs;		/* tolerance for time divergence */
+	double tolerance_percent;   /* tolerance for time divergence in percent */
+
 	bool tcp_ts_ecr_scaled;		/* scale arbitrary inbound TS ECR? */
 	int tcp_ts_tick_usecs;		/* microseconds per TS val tick */
 
