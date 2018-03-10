@@ -24,7 +24,6 @@
 
 #include "packet_socket.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <net/if.h>
 #include <stdlib.h>
@@ -41,6 +40,7 @@
 #include <pcap.h>
 #endif
 
+#include "assert.h"
 #include "ethernet.h"
 #include "logging.h"
 

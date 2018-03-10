@@ -34,7 +34,10 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 
-void get_hw_address(const char *name, struct ether_addr *hw_address)
+#include "wrap.h"
+
+void get_hw_address(const char *name, struct ether_addr *hw_address,
+			enum ip_version_t ip_version)
 {
 	u8 *m = NULL;
 	struct ifreq ifr;
@@ -42,9 +45,7 @@ void get_hw_address(const char *name, struct ether_addr *hw_address)
 
 	DEBUGP("get_hw_address for device %s\n", name);
 
-	fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-	if (fd < 0)
-		die_perror("socket(AF_INET, SOCK_DGRAM, IPPROTO_IP)");
+	fd = wrap_socket(ip_version, SOCK_DGRAM);
 
 	/* Discover the index of the interface. */
 	snprintf(ifr.ifr_name, IFNAMSIZ, "%s", name);

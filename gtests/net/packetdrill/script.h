@@ -30,21 +30,29 @@
 #include <sys/time.h>
 #include "packet.h"
 
+#define MSGHDR_MAX_CONTROLLEN 1000	/* arbitrary maximum cmsg length */
+
 /* The types of expressions in a script */
 enum expression_t {
-	EXPR_NONE,
 	EXPR_ELLIPSIS,		  /* ... but no value */
 	EXPR_INTEGER,		  /* integer in 'num' */
 	EXPR_LINGER,		  /* struct linger for SO_LINGER */
 	EXPR_WORD,		  /* unquoted word in 'string' */
 	EXPR_STRING,		  /* double-quoted string in 'string' */
+	EXPR_GRE,		  /* GRE header */
+	EXPR_IN6_ADDR,		  /* in6_addr in 'address_ipv6' */
 	EXPR_SOCKET_ADDRESS_IPV4, /* sockaddr_in in 'socket_address_ipv4' */
 	EXPR_SOCKET_ADDRESS_IPV6, /* sockaddr_in6 in 'socket_address_ipv6' */
 	EXPR_BINARY,		  /* binary expression, 2 sub-expressions */
 	EXPR_LIST,		  /* list of expressions */
 	EXPR_IOVEC,		  /* expression tree for an iovec struct */
 	EXPR_MSGHDR,		  /* expression tree for a msghdr struct */
+	EXPR_CMSG,		  /* expression tree for a cmsg struct */
 	EXPR_POLLFD,		  /* expression tree for a pollfd struct */
+	EXPR_MPLS_STACK,	  /* MPLS label stack expression */
+	EXPR_SCM_TIMESTAMPING,	  /* scm_timestamping expression */
+	EXPR_SOCK_EXTENDED_ERR,	  /* scm_sock_extended_err expression */
+	EXPR_EPOLLEV,	          /* expression tree for a epoll_event struct */
 	NUM_EXPR_TYPES,
 };
 /* Convert an expression type to a human-readable string */
@@ -57,13 +65,20 @@ struct expression {
 		s64 num;
 		char *string;
 		struct linger linger;
+		struct gre gre;
+		struct in6_addr address_ipv6;
 		struct sockaddr_in *socket_address_ipv4;
 		struct sockaddr_in6 *socket_address_ipv6;
 		struct binary_expression *binary;
 		struct expression_list *list;
 		struct iovec_expr *iovec;
 		struct msghdr_expr *msghdr;
+		struct cmsg_expr *cmsg;
 		struct pollfd_expr *pollfd;
+		struct mpls_stack *mpls_stack;
+		struct scm_timestamping_expr *scm_timestamping;
+		struct sock_extended_err_expr *sock_extended_err;
+		struct epollev_expr *epollev;
 	} value;
 	const char *format;	/* the printf format for printing the value */
 };
@@ -95,7 +110,30 @@ struct msghdr_expr {
 	struct expression *msg_namelen;
 	struct expression *msg_iov;
 	struct expression *msg_iovlen;
+	struct expression *msg_control;
 	struct expression *msg_flags;
+};
+
+/* Parse tree for a cmsg item in a sendmsg/recvmsg syscall. */
+struct cmsg_expr {
+	struct expression *cmsg_level;
+	struct expression *cmsg_type;
+	struct expression *cmsg_data;
+};
+
+/* A verbatim copy of Linux's struct scm_timestamping for portability. */
+struct scm_timestamping_expr {
+	struct timespec ts[3];
+};
+
+/* Parse tree for a sock_extended_err item in a recvmsg syscall. */
+struct sock_extended_err_expr {
+	struct expression *ee_errno;
+	struct expression *ee_origin;
+	struct expression *ee_type;
+	struct expression *ee_code;
+	struct expression *ee_info;
+	struct expression *ee_data;
 };
 
 /* Parse tree for a pollfd struct in a poll syscall. */
@@ -103,6 +141,15 @@ struct pollfd_expr {
 	struct expression *fd;		/* file descriptor */
 	struct expression *events;	/* requested events */
 	struct expression *revents;	/* returned events */
+};
+
+/* Parse tree for a epoll_event struct in an epoll syscall. */
+struct epollev_expr {
+	struct expression *events;
+	struct expression *ptr;
+	struct expression *fd;
+	struct expression *u32;
+	struct expression *u64;
 };
 
 /* The errno-related info from strace to summarize a system call error */
@@ -204,9 +251,15 @@ struct script {
 	struct option_list *option_list;    /* linked list of options */
 	struct command_spec *init_command;  /* untimed initialization command */
 	struct event	*event_list;	    /* linked list of all events */
+	struct command_spec *cleanup_command;  /* untimed cleanup command */
 	char		*buffer;	    /* raw input text of the script */
 	int		length;		    /* number of bytes in the script */
 };
+
+/* Global pointer for final command we always execute at end of script: */
+extern const char *cleanup_cmd;
+/* Path of currently-executing script, for use in cleanup command errors: */
+extern const char *script_path;
 
 /* A table entry mapping a bit mask to its human-readable name.
  * A table of such mappings must be terminated with a struct with a

@@ -49,6 +49,7 @@ int tcp_options_append(struct tcp_options *options,
 	memcpy(options->data + options->length, option, option->length);
 	options->length += option->length;
 	assert(options->length <= sizeof(options->data));
+	free(option);
 	return STATUS_OK;
 }
 

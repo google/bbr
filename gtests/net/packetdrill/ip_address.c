@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 Google Inc.
+ * Copyright 2013-2015 Google Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -28,6 +28,8 @@
 #include <net/if.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "logging.h"
 
@@ -301,7 +303,7 @@ int is_ip_local(const struct ip_address *ip)
 	return get_ip_device(ip, dev_name);
 }
 
-extern int netmask_to_prefix(const char *netmask)
+int netmask_to_prefix(const char *netmask)
 {
 	int pos;
 	struct ip_address mask = ipv4_parse(netmask);
@@ -314,4 +316,64 @@ extern int netmask_to_prefix(const char *netmask)
 		++prefix_len;
 	}
 	return prefix_len;
+}
+
+static int urandom_read(void *buffer, int sz)
+{
+	static int fd_urandom = -1;
+
+	if (fd_urandom == -1)
+		fd_urandom = open("/dev/urandom", O_RDONLY);
+	return read(fd_urandom, buffer, sz);
+}
+
+void generate_random_ipv4_addr(char *result, const char *base,
+			       const char *netmask)
+{
+	int prefix_len = netmask_to_prefix(netmask);
+	struct ip_address addr = ipv4_parse(base);
+
+	if (prefix_len < 31) {
+		unsigned int rnd;
+
+		if (urandom_read(&rnd, sizeof(rnd)) == sizeof(rnd)) {
+			if (prefix_len) {
+				u32 mask = (1U << (32 - prefix_len)) - 1;
+
+				rnd &= mask;
+				/* .0 is reserved for network address.
+				 * .1 is reserved for the gateway
+				 */
+				if (rnd < 2)
+					rnd = 2;
+				/* .255.255 is reserved for net broadcast */
+				if (rnd == mask)
+					rnd--;
+			}
+			addr.ip.v4.s_addr |= htonl(rnd);
+		}
+	}
+	ip_to_string(&addr, result);
+}
+
+/* In this version, we randomize last 32bits (or less) of the address.
+ * There is no need to fully use RFC 4193 range.
+ * ( fd3d:fa7b:d17d::/48 in unique local address space )
+ */
+void generate_random_ipv6_addr(char *result, const char *base, int prefixlen)
+{
+	struct ip_address addr = ipv6_parse(base);
+	unsigned int mask = ~0U, rnd = 0;
+
+	urandom_read(&rnd, sizeof(rnd));
+	if (prefixlen > 128 - 32) {
+		mask = (1U << (128 - prefixlen)) - 1;
+		rnd &= mask;
+	}
+	if (!rnd)
+		rnd++;
+	if (rnd == mask)
+		rnd--;
+	addr.ip.v6.s6_addr32[3] |= htonl(rnd);
+	ip_to_string(&addr, result);
 }

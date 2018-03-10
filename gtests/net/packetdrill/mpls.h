@@ -31,9 +31,8 @@
 #ifndef __MPLS_HEADERS_H__
 #define __MPLS_HEADERS_H__
 
-#include "types.h"
-
 #include <stdlib.h>
+#include "types.h"
 
 /* On-the-wire MPLS "label stack entry", per RFC 3032 and RFC 5462. */
 struct mpls {

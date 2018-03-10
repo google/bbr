@@ -123,4 +123,9 @@ extern int get_ip_device(const struct ip_address *ip, char *dev_name);
 /* Convert dotted decimal netmask to equivalent CIDR prefix length */
 extern int netmask_to_prefix(const char *netmask);
 
+void generate_random_ipv4_addr(char *result, const char *base,
+			       const char *netmask);
+
+void generate_random_ipv6_addr(char *result, const char *base, int prefixlen);
+
 #endif /* __IP_ADDRESS_H__ */

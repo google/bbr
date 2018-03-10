@@ -242,19 +242,20 @@ static void wire_client_receive_packets_done(struct wire_client *wire_client)
  */
 int wire_client_init(struct wire_client *wire_client,
 		     const struct config *config,
-		     const struct script *script,
-		     const struct state *state)
+		     const struct script *script)
 {
 	DEBUGP("wire_client_init\n");
 	assert(config->is_wire_client);
 
 	get_hw_address(config->wire_client_device,
-		       &wire_client->client_ether_addr);
+		       &wire_client->client_ether_addr,
+		       config->ip_version);
 
 	wire_client->wire_conn = wire_conn_new();
 	wire_conn_connect(wire_client->wire_conn,
 				  &config->wire_server_ip,
-				  config->wire_server_port);
+				  config->wire_server_port,
+				  config->ip_version);
 
 	wire_client_send_args(wire_client, config);
 

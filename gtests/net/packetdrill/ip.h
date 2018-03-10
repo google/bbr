@@ -84,9 +84,14 @@ struct ipv4 {
 #define IP_ECN_ECT0 2
 #define IP_ECN_CE   3
 
-static inline u8 ipv4_ecn_bits(const struct ipv4 *ipv4)
+static inline u8 ipv4_tos_byte(const struct ipv4 *ipv4)
 {
-	return ipv4->tos & IP_ECN_MASK;
+	return ipv4->tos;
+}
+
+static inline u8 ipv4_ttl_byte(const struct ipv4 *ipv4)
+{
+	return ipv4->ttl;
 }
 
 static inline int ipv4_header_len(const struct ipv4 *ipv4)

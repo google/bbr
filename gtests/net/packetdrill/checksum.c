@@ -24,7 +24,7 @@
 
 #include "checksum.h"
 
-#include <assert.h>
+#include "assert.h"
 
 /* Add bytes in buffer to a running checksum. Returns the new
  * intermediate checksum. Use ip_checksum_fold() to convert the

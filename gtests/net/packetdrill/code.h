@@ -52,6 +52,12 @@ enum code_data_t {
 #if HAVE_TCP_INFO
 	DATA_TCP_INFO,			/* binary tcp_info */
 #endif  /* HAVE_TCP_INFO */
+#if HAVE_TCP_CC_INFO
+	DATA_TCP_CC_INFO,		/* binary tcp_cc_info */
+#endif	/* HAVE_SO_MEMINFO */
+#if HAVE_SO_MEMINFO
+	DATA_SO_MEMINFO,		/* binary so_memfino */
+#endif	/* HAVE_SO_MEMINFO */
 	DATA_NUM_TYPES,			/* number of types of fragments */
 };
 

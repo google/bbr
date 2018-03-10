@@ -25,10 +25,10 @@
 
 #include "types.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "assert.h"
 #include "fmemopen.h"
 
 #if !defined(HAVE_FMEMOPEN)

@@ -112,6 +112,8 @@ struct icmp_type_info icmpv6_types[] = {
 	{ ICMPV6_PKT_TOOBIG,	"packet_too_big" },
 	{ ICMPV6_TIME_EXCEED,	"time_exceeded", icmpv6_time_exceed_codes },
 	{ ICMPV6_PARAMPROB,	"parameter_problem", icmpv6_paramprob_codes },
+	{ ICMPV6_ECHO_REQUEST,  "echo_request" },
+	{ ICMPV6_ECHO_REPLY,    "echo_reply" },
 	{ 0, NULL, NULL },
 };
 
@@ -140,8 +142,8 @@ static int icmp_header_len(int address_family)
 }
 
 /* Fill in ICMPv4 header fields. */
-static int set_icmpv4_header(struct icmpv4 *icmpv4,
-			     u8 type, u8 code, s64 mtu, char **error)
+static int set_icmpv4_header(struct icmpv4 *icmpv4, u8 type, u8 code,
+			     s64 mtu, u16 echo_id, char **error)
 {
 	icmpv4->type = type;
 	icmpv4->code = code;
@@ -160,13 +162,15 @@ static int set_icmpv4_header(struct icmpv4 *icmpv4,
 		}
 		icmpv4->message.frag.mtu = htons(mtu);
 	}
+	if (echo_id > 0)
+		icmpv4->message.echo.id = htons(echo_id);
 
 	return STATUS_OK;
 }
 
 /* Fill in ICMPv4 header fields. */
-static int set_icmpv6_header(struct icmpv6 *icmpv6,
-			     u8 type, u8 code, s64 mtu, char **error)
+static int set_icmpv6_header(struct icmpv6 *icmpv6, u8 type, u8 code,
+			     s64 mtu, u16 echo_id, char **error)
 {
 	icmpv6->type = type;
 	icmpv6->code = code;
@@ -185,13 +189,17 @@ static int set_icmpv6_header(struct icmpv6 *icmpv6,
 		}
 		icmpv6->message.packet_too_big.mtu = htonl(mtu);
 	}
+	if (echo_id > 0) {
+		icmpv6->message.u_echo.identifier = htons(echo_id);
+	}
 	return STATUS_OK;
 }
 
 /* Populate ICMP header fields. */
 static int set_packet_icmp_header(struct packet *packet, void *icmp,
 				  int address_family, int icmp_bytes,
-				  u8 type, u8 code, s64 mtu, char **error)
+				  u8 type, u8 code, s64 mtu, u16 echo_id,
+				  char **error)
 {
 	struct header *icmp_header = NULL;
 
@@ -202,7 +210,7 @@ static int set_packet_icmp_header(struct packet *packet, void *icmp,
 		icmp_header = packet_append_header(packet, HEADER_ICMPV4,
 						   sizeof(*icmpv4));
 		icmp_header->total_bytes = icmp_bytes;
-		return set_icmpv4_header(icmpv4, type, code, mtu, error);
+		return set_icmpv4_header(icmpv4, type, code, mtu, echo_id, error);
 	} else if (address_family == AF_INET6) {
 		struct icmpv6 *icmpv6 = (struct icmpv6 *) icmp;
 		packet->icmpv6 = icmpv6;
@@ -210,7 +218,7 @@ static int set_packet_icmp_header(struct packet *packet, void *icmp,
 		icmp_header = packet_append_header(packet, HEADER_ICMPV6,
 						   sizeof(*icmpv6));
 		icmp_header->total_bytes = icmp_bytes;
-		return set_icmpv6_header(icmpv6, type, code, mtu, error);
+		return set_icmpv6_header(icmpv6, type, code, mtu, echo_id, error);
 	} else {
 		assert(!"bad ip_version in config");
 	}
@@ -282,7 +290,9 @@ struct packet *new_icmp_packet(int address_family,
 				int protocol,
 				u32 tcp_start_sequence,
 				u32 payload_bytes,
+				struct ip_info ip_info,
 				s64 mtu,
+				s64 echo_id,
 				char **error)
 {
 	s32 type = -1;	/* bad type; means "unknown so far" */
@@ -290,17 +300,36 @@ struct packet *new_icmp_packet(int address_family,
 
 	struct packet *packet = NULL;  /* the newly-allocated result packet */
 	/* Calculate lengths in bytes of all sections of the packet.
-	 * For now we only support the most common ICMP message
+	 * For TCP/UDP, for now we only support the most common ICMP message
 	 * format, which includes at the end the original outgoing IP
 	 * header and the first 8 bytes after that (which will
 	 * typically have the port info needed to demux the message).
+	 * For RAW, we pad the icmp packet with 0 and the total length is
+	 * payload_bytes.
 	 */
 	const int ip_fixed_bytes = ip_header_min_len(address_family);
 	const int ip_option_bytes = 0;
 	const int ip_header_bytes = ip_fixed_bytes + ip_option_bytes;
-	const int echoed_bytes = ip_fixed_bytes + ICMP_ECHO_BYTES;
-	const int icmp_bytes = icmp_header_len(address_family) + echoed_bytes;
-	const int ip_bytes = ip_header_bytes + icmp_bytes;
+	int echoed_bytes = 0;
+	int icmp_bytes = 0;
+	int ip_bytes = 0;
+
+	if (protocol == IPPROTO_TCP || protocol == IPPROTO_UDP) {
+		echoed_bytes = ip_fixed_bytes + ICMP_ECHO_BYTES;
+		icmp_bytes = icmp_header_len(address_family) + echoed_bytes;
+		ip_bytes = ip_header_bytes + icmp_bytes;
+	} else if (protocol == IPPROTO_RAW) {
+		echoed_bytes = 0;
+		icmp_bytes = payload_bytes;
+		ip_bytes = ip_header_bytes + payload_bytes;
+	}
+
+	/* Sanity-check on echo_id to make sure it fits in u16 */
+	if (echo_id < 0 || echo_id > 65535) {
+		asprintf(error,
+			 "invalid echo_id, must be between 0 and 65535");
+		goto error_out;
+	}
 
 	/* Sanity-check all the various lengths */
 	if (ip_option_bytes & 0x3) {
@@ -310,6 +339,13 @@ struct packet *new_icmp_packet(int address_family,
 		goto error_out;
 	}
 	assert((ip_header_bytes & 0x3) == 0);
+	if (icmp_bytes < icmp_header_len(address_family)) {
+		asprintf(error, "icmp_bytes %d smaller than icmp header "
+			 "length %d",
+			 icmp_bytes, icmp_header_len(address_family));
+		goto error_out;
+	}
+
 
 	/* Parse the ICMP type and code */
 	if (parse_icmp_type_and_code(address_family, type_string, code_string,
@@ -324,17 +360,17 @@ struct packet *new_icmp_packet(int address_family,
 
 	packet->direction = direction;
 	packet->flags = 0;
-	packet->ecn = 0;
+	packet->tos_chk = ip_info.tos.check;
 
 	/* Set IP header fields */
-	const enum ip_ecn_t ecn = ECN_NONE;
-	set_packet_ip_header(packet, address_family, ip_bytes, ecn,
+	set_packet_ip_header(packet, address_family, ip_bytes, ip_info.tos.value,
+			     ip_info.flow_label, ip_info.ttl,
 			     icmp_protocol(address_family));
 
 	/* Find the start of the ICMP header and then populate common fields. */
 	void *icmp_header = ip_start(packet) + ip_header_bytes;
 	if (set_packet_icmp_header(packet, icmp_header, address_family,
-				   icmp_bytes, type, code, mtu, error))
+				   icmp_bytes, type, code, mtu, echo_id, error))
 		goto error_out;
 
 	/* All ICMP message types currently supported by this tool
@@ -345,16 +381,20 @@ struct packet *new_icmp_packet(int address_family,
 	 * execution we fill in the port numbers and (if specified)
 	 * TCP sequence number in the TCP header.
 	 */
-	u8 *echoed_ip = packet_echoed_ip_header(packet);
-	const int echoed_ip_bytes = (ip_fixed_bytes +
-				     layer4_header_len(protocol) +
-				     payload_bytes);
-	set_ip_header(echoed_ip, address_family, echoed_ip_bytes,
-		      ecn, protocol);
-	if (protocol == IPPROTO_TCP) {
-		u32 *seq = packet_echoed_tcp_seq(packet);
-		*seq = htonl(tcp_start_sequence);
-	}
+	if (echoed_bytes) {
+		u8 *echoed_ip = packet_echoed_ip_header(packet);
+		const int echoed_ip_bytes = (ip_fixed_bytes +
+					     layer4_header_len(protocol) +
+					     payload_bytes);
+		set_ip_header(echoed_ip, address_family, echoed_ip_bytes,
+			      0, 0, 0, protocol);
+		if (protocol == IPPROTO_TCP) {
+			u32 *seq = packet_echoed_tcp_seq(packet);
+			*seq = htonl(tcp_start_sequence);
+		}
+		packet->echoed_header = true;
+	} else
+		packet->echoed_header = false;
 
 	packet->ip_bytes = ip_bytes;
 	return packet;

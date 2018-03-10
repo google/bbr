@@ -47,7 +47,9 @@ extern struct packet *new_icmp_packet(int address_family,
 				      int protocol,
 				      u32 tcp_start_sequence,
 				      u32 payload_bytes,
+				      struct ip_info ip_info,
 				      s64 mtu,
+				      s64 echo_id,
 				      char **error);
 
 #endif /* __ICMP_PACKET_H__ */

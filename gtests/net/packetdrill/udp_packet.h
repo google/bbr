@@ -36,6 +36,9 @@
  */
 extern struct packet *new_udp_packet(int address_family,
 				     enum direction_t direction,
+				     struct ip_info ip_info,
 				     u16 udp_payload_bytes,
+				     u16 src_port,
+				     u16 dst_port,
 				     char **error);
 #endif /* __UDP_PACKET_H__ */

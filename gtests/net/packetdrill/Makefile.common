@@ -28,12 +28,13 @@ packetdrill-lib := \
          fmemopen.o open_memstream.o \
          link_layer.o wire_conn.o wire_protocol.o \
          wire_client.o wire_client_netdev.o \
-         wire_server.o wire_server_netdev.o
+         wire_server.o wire_server_netdev.o \
+	 epoll.o pipe.o file.o so_testing.o wrap.o
 
 packetdrill-objs := packetdrill.o $(packetdrill-lib)
 
 packetdrill: $(packetdrill-objs)
-	$(CC) -o packetdrill -g -static $(packetdrill-objs) $(packetdrill-ext-libs)
+	$(CC) -o packetdrill -g $(packetdrill-objs) $(packetdrill-ext-libs)
 
 test-bins := checksum_test packet_parser_test packet_to_string_test
 tests: $(test-bins)

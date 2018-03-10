@@ -25,11 +25,11 @@
 #include "types.h"
 
 #include <arpa/inet.h>
-#include <assert.h>
 #include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "assert.h"
 #include "config.h"
 #include "parse.h"
 #include "run.h"

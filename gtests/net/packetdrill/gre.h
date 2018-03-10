@@ -34,38 +34,57 @@
 #include "types.h"
 
 /* GRE header. See RFC 1701. */
+
+#define GRE_MINLEN	4	/* smallest possible GRE header */
+
+#define GRE_FLAG_C	0x8000	/* checksum */
+#define GRE_FLAG_R	0x4000	/* routing */
+#define GRE_FLAG_K	0x2000	/* key */
+#define GRE_FLAG_S	0x1000	/* sequence */
+
 struct gre {
+	union {
+		__be16 flags;
+
+		struct {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	__u16	recursion_control:3,
-		strict_route:1,
-		has_seq:1,
-		has_key:1,
-		has_routing:1,
-		has_checksum:1,
-		version:3,
-		reserved:4,
-		ack:1;
+			__u16	recursion_control:3,
+				strict_route:1,
+				has_seq:1,
+				has_key:1,
+				has_routing:1,
+				has_checksum:1,
+				version:3,
+				reserved:4,
+				ack:1;
 #elif __BYTE_ORDER == __BIG_ENDIAN
-	__u16	has_checksum:1,
-		has_routing:1,
-		has_key:1,
-		has_seq:1,
-		strict_route:1,
-		recursion_control:3,
-		ack:1,
-		reserved:4,
-		version:3;
+			__u16	has_checksum:1,
+				has_routing:1,
+				has_key:1,
+				has_seq:1,
+				strict_route:1,
+				recursion_control:3,
+				ack:1,
+				reserved:4,
+				version:3;
 #else
 # error "Please fix endianness defines"
 #endif
-	__be16 protocol;
-	/* bytes 4+ (optional) not defined here... */
+		};
+	};
+	__be16 proto;
+
+	/* The optional header fields live here. */
+	union {
+		__be16 be16[6];
+		__be32 be32[3];
+	};
 };
 
 /* Return the length in bytes of a GRE header. */
 static inline int gre_len(const struct gre *gre)
 {
-	int bytes = sizeof(*gre);
+	int bytes = GRE_MINLEN;
 
 	assert(gre->version == 0);	/* we only support v0 */
 	assert(!gre->has_routing);	/* routing info is variable-length! */

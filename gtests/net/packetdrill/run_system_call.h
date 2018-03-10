@@ -77,6 +77,12 @@ struct syscalls {
 	pthread_cond_t dequeued;
 };
 
+/* Info for a nla type */
+struct nla_type_info {
+	const char* name;
+	int length;
+};
+
 /* Allocate and return internal state for the system call module. */
 extern struct syscalls *syscalls_new(struct state *state);
 

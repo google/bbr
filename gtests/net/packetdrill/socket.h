@@ -31,6 +31,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include "config.h"
+#include "fd_state.h"
 #include "hash_map.h"
 #include "logging.h"
 #include "packet.h"
@@ -62,19 +63,27 @@ struct tuple {
 
 /* The scripted or live aspects of socket state */
 struct socket_state {
-	int fd;				/* file descriptor for this socket */
 	struct endpoint local;		/* local endpoint address */
 	u32 local_isn;			/* initial TCP sequence (host order) */
 	struct endpoint remote;		/* remote endpoint address */
 	u32 remote_isn;			/* initial TCP sequence (host order) */
 };
 
+/* Flowlabel mapping between script and live */
+struct flowlabel_map {
+	u32 flowlabel_script;
+	u32 flowlabel_live;
+};
+
 /* The runtime state for a socket */
 struct socket {
+	/* NOTE: struct fd_state must be first field in all fd flavors. */
+	struct fd_state fd;		/* info about fd for this socket */
+
 	enum socket_state_t state;	/* current state of socket */
 	int address_family;		/* AF_INET or AF_INET6 */
+	int type;			/* e.g. SOCK_STREAM, SOCK_DGRAM */
 	int protocol;			/* IPPROTO_UDP or IPPROTO_TCP */
-	bool is_closed;			/* has app called close(2) ? */
 
 	/* The "canned" info from the test script */
 	struct socket_state script;
@@ -95,6 +104,8 @@ struct socket {
 	bool found_first_tcp_ts;
 	u32 first_script_ts_val;
 	u32 first_actual_ts_val;
+	u32 first_script_ts_ecr;
+	u32 first_actual_ts_ecr;
 
 	/* We remember the last inbound/outbound TCP header so we can send a
 	 * RST packet that the kernel will accept for this socket, in
@@ -104,8 +115,18 @@ struct socket {
 	struct tcp last_injected_tcp_header;
 	u32 last_injected_tcp_payload_len;
 
-	struct socket *next;	/* next in linked list of sockets */
+	/* flowlabel mapping */
+	struct flowlabel_map flowlabel_map;
 };
+
+/* Convert to socket pointer if the fd is a socket, otherwise return NULL. */
+static inline struct socket *fd_to_socket(struct fd_state *fd)
+{
+	if (fd && fd->ops->type == FD_SOCKET)
+		return (struct socket *)fd;
+	else
+		return NULL;
+}
 
 struct state;
 

@@ -60,12 +60,14 @@ struct wire_server {
 
 static struct wire_server *wire_server_new(struct wire_conn *accepted_conn,
 					   const char *wire_server_device,
-					   u16 wire_server_port)
+					   u16 wire_server_port,
+					   enum ip_version_t ip_version)
 {
 	struct wire_server *wire_server = calloc(1, sizeof(struct wire_server));
 	wire_server->wire_conn = accepted_conn;
 	wire_server->wire_server_device = strdup(wire_server_device);
-	get_hw_address(wire_server_device, &wire_server->server_ether_addr);
+	get_hw_address(wire_server_device, &wire_server->server_ether_addr,
+			ip_version);
 	wire_server->port = wire_server_port;
 	return wire_server;
 }
@@ -380,7 +382,7 @@ static int wire_server_run_script(struct wire_server *wire_server,
 
 	DEBUGP("wire_server_run_script\n");
 
-	state->live_start_time_usecs = now_usecs();
+	state->live_start_time_usecs = now_usecs(state);
 	DEBUGP("live_start_time_usecs is %lld\n",
 	       state->live_start_time_usecs);
 
@@ -517,7 +519,8 @@ void run_wire_server(const struct config *config)
 
 	listen_conn = wire_conn_new();
 
-	wire_conn_bind_listen(listen_conn, config->wire_server_port);
+	wire_conn_bind_listen(listen_conn, config->wire_server_port,
+		config->ip_version);
 
 	while (1) {
 		struct wire_conn *accepted_conn = NULL;
@@ -526,7 +529,8 @@ void run_wire_server(const struct config *config)
 		struct wire_server *wire_server =
 			wire_server_new(accepted_conn,
 					config->wire_server_device,
-					config->wire_server_port);
+					config->wire_server_port,
+					config->ip_version);
 
 		start_wire_server_thread(wire_server);
 	}

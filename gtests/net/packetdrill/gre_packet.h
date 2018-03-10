@@ -33,7 +33,8 @@
  * return STATUS_OK; on error return STATUS_ERR and fill in a
  * malloc-allocated error message in *error.
  */
-extern int gre_header_append(struct packet *packet, char **error);
+extern int gre_header_append(struct packet *packet,
+			     const struct gre *gre, char **error);
 
 /* Finalize the GRE header by filling in all necessary fields that
  * were not filled in at parse time.

@@ -62,11 +62,13 @@
 #include <sys/socket.h>
 #include "code.h"
 #include "config.h"
+#include "fd_state.h"
 #include "netdev.h"
 #include "run_packet.h"
 #include "run_system_call.h"
 #include "script.h"
 #include "socket.h"
+#include "so_testing.h"
 #include "wire_client.h"
 
 /* Public top-level entry point for executing a test script */
@@ -92,16 +94,18 @@ struct state {
 	struct netdev *netdev;		/* for sending/receiving TCP packets */
 	struct packets *packets;	/* for processing packets */
 	struct syscalls *syscalls;	/* for running system calls */
-	struct socket *sockets;		/* list of all live sockets */
+	struct fd_state *fds;		/* list of all file descriptors */
 	struct socket *socket_under_test;	/* socket handling packets */
 	struct script *script;			/* script we're running */
 	struct event *event;			/* the current event */
 	struct event *last_event;		/* previous event */
 	struct code_state *code;	/* for running post-processing code */
 	struct wire_client *wire_client;	/* for on-the-wire tests */
+	struct so_instance *so_instance;	/* for SO testing */
 	s64 script_start_time_usecs;	/* time of first event in script */
 	s64 script_last_time_usecs;	/* time of previous event in script */
 	s64 live_start_time_usecs;	/* time of first event in live test */
+	int num_events;			/* events executed so far */
 };
 
 /* Allocate all run-time state for executing a test script. */
@@ -111,6 +115,9 @@ extern struct state *state_new(struct config *config,
 
 /* Free all run-time state for a test. */
 void state_free(struct state *state);
+
+/* Add the file descriptor to the list of run-time file descriptors. */
+void state_add_fd(struct state *state, struct fd_state *fd);
 
 /* Grab the global lock for all global state. */
 static inline void run_lock(struct state *state)
@@ -127,7 +134,7 @@ static inline void run_unlock(struct state *state)
 }
 
 /* Get the wall clock time of day in microseconds. */
-extern s64 now_usecs(void);
+extern s64 now_usecs(struct state *state);
 
 /* Convert script time to live wall clock time. */
 static inline s64 script_time_to_live_time_usecs(struct state *state,
@@ -183,5 +190,8 @@ extern void set_scheduling_priority(void);
 
 /* Try to pin our pages into RAM. */
 extern void lock_memory(void);
+
+/* Run final command we always execute at end of script, to clean up. */
+extern int run_cleanup_command(void);
 
 #endif /* __RUN_H__ */

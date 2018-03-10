@@ -42,11 +42,17 @@
  */
 #define TCPOPT_FASTOPEN_MAGIC	0xF989
 
-/* TFO option must have: 1-byte kind, 1-byte length, and 2-byte magic: */
+/* Experimental TFO option must have:
+ * 1-byte kind, 1-byte length, and 2-byte magic: */
 #define TCPOLEN_EXP_FASTOPEN_BASE 4	/* smallest legal TFO option size */
+
+/* RFC7413 TFO option must have: 1-byte kind, 1-byte length: */
+#define TCPOLEN_FASTOPEN_BASE 2		/* smallest legal TFO option size */
 
 /* The TFO option base prefix leaves this amount of space: */
 #define MAX_TCP_FAST_OPEN_COOKIE_BYTES				\
+	(MAX_TCP_OPTION_BYTES - TCPOLEN_FASTOPEN_BASE)
+#define MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES			\
 	(MAX_TCP_OPTION_BYTES - TCPOLEN_EXP_FASTOPEN_BASE)
 
 /* Represents a list of TCP options in their wire format. */
@@ -84,7 +90,9 @@ struct tcp_option {
 			struct sack_block block[4];
 		} sack;
 		struct {
-			u16 magic;	/* must be TCPOPT_FASTOPEN_MAGIC */
+			u8 digest[TCP_MD5_DIGEST_LEN];
+		} md5; /* TCP MD5 Signature Option: RFC 2385 */
+		struct {
 			/* The fast open chookie should be 4-16 bytes
 			 * of cookie, multiple of 2 bytes, but we
 			 * allow for larger sizes, so we can test what
@@ -92,6 +100,10 @@ struct tcp_option {
 			 */
 			u8 cookie[MAX_TCP_FAST_OPEN_COOKIE_BYTES];
 		} fast_open;
+		struct {
+			u16 magic;	/* must be TCPOPT_FASTOPEN_MAGIC */
+			u8 cookie[MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES];
+		} fast_open_exp;
 	} data;
 } __packed tcp_option;
 

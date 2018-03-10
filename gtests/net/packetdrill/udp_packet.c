@@ -29,7 +29,10 @@
 
 struct packet *new_udp_packet(int address_family,
 			       enum direction_t direction,
+			       struct ip_info ip_info,
 			       u16 udp_payload_bytes,
+			       u16 src_port,
+			       u16 dst_port,
 			       char **error)
 {
 	struct packet *packet = NULL;  /* the newly-allocated result packet */
@@ -63,11 +66,12 @@ struct packet *new_udp_packet(int address_family,
 
 	packet->direction = direction;
 	packet->flags = 0;
-	packet->ecn = ECN_NONE;
+	packet->tos_chk = ip_info.tos.check;
 
 	/* Set IP header fields */
 	set_packet_ip_header(packet, address_family, ip_bytes,
-			     packet->ecn, IPPROTO_UDP);
+			     ip_info.tos.value, ip_info.flow_label,
+			     ip_info.ttl, IPPROTO_UDP);
 
 	udp_header = packet_append_header(packet, HEADER_UDP,
 					  sizeof(struct udp));
@@ -77,8 +81,8 @@ struct packet *new_udp_packet(int address_family,
 	packet->udp = (struct udp *) (ip_start(packet) + ip_header_bytes);
 
 	/* Set UDP header fields */
-	packet->udp->src_port	= htons(0);
-	packet->udp->dst_port	= htons(0);
+	packet->udp->src_port	= htons(src_port);
+	packet->udp->dst_port	= htons(dst_port);
 	packet->udp->len	= htons(udp_header_bytes + udp_payload_bytes);
 	packet->udp->check	= 0;
 

@@ -24,9 +24,9 @@
 
 #include "packet_to_string.h"
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include "assert.h"
 #include "packet_parser.h"
 
 static void test_tcp_ipv4_packet_to_string(void)
@@ -70,7 +70,7 @@ static void test_tcp_ipv4_packet_to_string(void)
 	assert(error == NULL);
 	printf("dump = '%s'\n", dump);
 	expected =
-		"ipv4 2.2.2.2 > 1.1.1.1: gre: "
+		"ipv4 2.2.2.2 > 1.1.1.1: gre flags 0x0 proto 0x0800: "
 		". 1:1(0) ack 2202903899 win 257 "
 		"<sack 2202905347:2202906795,TS val 300 ecr 1623332896>";
 	assert(strcmp(dump, expected) == 0);
@@ -82,7 +82,7 @@ static void test_tcp_ipv4_packet_to_string(void)
 	assert(error == NULL);
 	printf("dump = '%s'\n", dump);
 	expected =
-		"ipv4 2.2.2.2 > 1.1.1.1: gre: "
+		"ipv4 2.2.2.2 > 1.1.1.1: gre flags 0x0 proto 0x0800: "
 		"192.0.2.1:53055 > 192.168.0.1:8080 "
 		". 1:1(0) ack 2202903899 win 257 "
 		"<sack 2202905347:2202906795,TS val 300 ecr 1623332896>";
@@ -95,7 +95,7 @@ static void test_tcp_ipv4_packet_to_string(void)
 	assert(error == NULL);
 	printf("dump = '%s'\n", dump);
 	expected =
-		"ipv4 2.2.2.2 > 1.1.1.1: gre: "
+		"ipv4 2.2.2.2 > 1.1.1.1: gre flags 0x0 proto 0x0800: "
 		"192.0.2.1:53055 > 192.168.0.1:8080 "
 		". 1:1(0) ack 2202903899 win 257 "
 		"<sack 2202905347:2202906795,TS val 300 ecr 1623332896>"
@@ -156,7 +156,7 @@ static void test_tcp_ipv6_packet_to_string(void)
 	assert(error == NULL);
 	printf("dump = '%s'\n", dump);
 	expected =
-		"ipv6 2::2222 > 1::1111: gre: "
+		"ipv6 2::2222 > 1::1111: gre flags 0x0 proto 0x86dd: "
 		"S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>";
 	assert(strcmp(dump, expected) == 0);
 	free(dump);
@@ -167,7 +167,7 @@ static void test_tcp_ipv6_packet_to_string(void)
 	assert(error == NULL);
 	printf("dump = '%s'\n", dump);
 	expected =
-		"ipv6 2::2222 > 1::1111: gre: "
+		"ipv6 2::2222 > 1::1111: gre flags 0x0 proto 0x86dd: "
 		"2001:db8::1:54242 > fd3d:fa7b:d17d::1:8080 "
 		"S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>";
 	assert(strcmp(dump, expected) == 0);
@@ -179,7 +179,7 @@ static void test_tcp_ipv6_packet_to_string(void)
 	assert(error == NULL);
 	printf("dump = '%s'\n", dump);
 	expected =
-		"ipv6 2::2222 > 1::1111: gre: "
+		"ipv6 2::2222 > 1::1111: gre flags 0x0 proto 0x86dd: "
 		"2001:db8::1:54242 > fd3d:fa7b:d17d::1:8080 "
 		"S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>\n"
 		"0x0000: 60 00 00 00 00 4c 2f ff 00 02 00 00 00 00 00 00 " "\n"
@@ -238,7 +238,7 @@ static void test_gre_mpls_tcp_ipv4_packet_to_string(void)
 	assert(error == NULL);
 	printf("dump = '%s'\n", dump);
 	expected =
-		"ipv4 192.168.0.1 > 192.0.2.2: gre: "
+		"ipv4 192.168.0.1 > 192.0.2.2: gre flags 0x0 proto 0x8847: "
 		"mpls (label 0, tc 0, ttl 0) "
 		"(label 1048575, tc 7, [S], ttl 255): "
 		"192.168.0.1:8080 > 192.0.2.1:56268 "
@@ -248,10 +248,54 @@ static void test_gre_mpls_tcp_ipv4_packet_to_string(void)
 	free(dump);
 }
 
+static void test_tcp_md5_option_to_string(void)
+{
+	/* An IPv4/TCP packet. */
+	u8 data[] = {
+		/* IPv4, TCP: */
+		0x45, 0x00, 0x00, 0x3c, 0x00, 0x00, 0x00, 0x00,
+		0xff, 0x06, 0x89, 0x56, 0xc0, 0x00, 0x02, 0x01,
+		0xc0, 0xa8, 0xaf, 0xbb, 0x8a, 0x6f, 0x1f, 0x90,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0xa0, 0x02, 0x01, 0x00, 0x36, 0x14, 0x00, 0x00,
+		0x13, 0x12, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
+		0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+		0x0e, 0x0f, 0x01, 0x01
+	};
+
+	struct packet *packet = packet_new(sizeof(data));
+
+	/* Populate and parse a packet */
+	memcpy(packet->buffer, data, sizeof(data));
+	char *error = NULL;
+	enum packet_parse_result_t result =
+		parse_packet(packet, sizeof(data), PACKET_LAYER_3_IP,
+				     &error);
+	assert(result == PACKET_OK);
+	assert(error == NULL);
+
+	int status = 0;
+	char *dump = NULL, *expected = NULL;
+
+	/* Test a DUMP_SHORT dump */
+	status = packet_to_string(packet, DUMP_SHORT, &dump, &error);
+	assert(status == STATUS_OK);
+	assert(error == NULL);
+	printf("dump = '%s'\n", dump);
+	expected =
+		"S 1:1(0) win 256 "
+		"<md5 000102030405060708090a0b0c0d0e0f,nop,nop>";
+	assert(strcmp(dump, expected) == 0);
+	free(dump);
+
+	packet_free(packet);
+}
+
 int main(void)
 {
 	test_tcp_ipv4_packet_to_string();
 	test_tcp_ipv6_packet_to_string();
 	test_gre_mpls_tcp_ipv4_packet_to_string();
+	test_tcp_md5_option_to_string();
 	return 0;
 }

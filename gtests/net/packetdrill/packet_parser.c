@@ -25,7 +25,6 @@
 #include "packet_parser.h"
 
 #include <arpa/inet.h>
-#include <assert.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -35,6 +34,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "assert.h"
 #include "checksum.h"
 #include "ethernet.h"
 #include "gre.h"
@@ -55,7 +55,7 @@ static int parse_layer3_packet_by_proto(struct packet *packet,
 					u8 *packet_end, char **error);
 static int parse_layer4(struct packet *packet, u8 *header_start,
 			int layer4_protocol, int layer4_bytes,
-			u8 *packet_end, bool *is_inner, char **error);
+			u8 *packet_end, char **error);
 
 static int parse_layer2_packet(struct packet *packet,
 			       u8 *header_start, u8 *packet_end,
@@ -102,7 +102,7 @@ static int parse_layer3_packet_by_proto(struct packet *packet,
 		if (ip->version == 4) {
 			return parse_ipv4(packet, p, packet_end, error);
 		} else {
-			asprintf(error, "Bad IP version for ETHERTYPE_IP");
+			asprintf(error, "Bad IP version (%d) for ETHERTYPE_IP", ip->version);
 			goto error_out;
 		}
 	} else if (proto == ETHERTYPE_IPV6) {
@@ -205,7 +205,6 @@ static int parse_ipv4(struct packet *packet, u8 *header_start, u8 *packet_end,
 	struct header *ip_header = NULL;
 	u8 *p = header_start;
 	const bool is_outer = (packet->ip_bytes == 0);
-	bool is_inner = false;
 	enum packet_parse_result_t result = PACKET_BAD;
 	struct ipv4 *ipv4 = (struct ipv4 *) (p);
 
@@ -268,10 +267,10 @@ static int parse_ipv4(struct packet *packet, u8 *header_start, u8 *packet_end,
 	const int layer4_bytes = ip_total_bytes - ip_header_bytes;
 	const int layer4_protocol = ipv4->protocol;
 	result = parse_layer4(packet, p, layer4_protocol, layer4_bytes,
-			      packet_end, &is_inner, error);
+			      packet_end, error);
 
-	/* If this is the innermost IP header then this is the primary. */
-	if (is_inner)
+	/* If this is the innermost L3 header then this is the primary. */
+	if (!packet->ipv4 && !packet->ipv6)
 		packet->ipv4 = ipv4;
 	/* If this is the outermost IP header then this is the packet length. */
 	if (is_outer)
@@ -294,7 +293,6 @@ static int parse_ipv6(struct packet *packet, u8 *header_start, u8 *packet_end,
 	struct header *ip_header = NULL;
 	u8 *p = header_start;
 	const bool is_outer = (packet->ip_bytes == 0);
-	bool is_inner = false;
 	struct ipv6 *ipv6 = (struct ipv6 *) (p);
 	enum packet_parse_result_t result = PACKET_BAD;
 
@@ -340,10 +338,10 @@ static int parse_ipv6(struct packet *packet, u8 *header_start, u8 *packet_end,
 	const int layer4_bytes = ip_total_bytes - ip_header_bytes;
 	const int layer4_protocol = ipv6->next_header;
 	result = parse_layer4(packet, p, layer4_protocol, layer4_bytes,
-			      packet_end, &is_inner, error);
+			      packet_end, error);
 
-	/* If this is the innermost IP header then this is the primary. */
-	if (is_inner)
+	/* If this is the innermost L3 header then this is the primary. */
+	if (!packet->ipv4 && !packet->ipv6)
 		packet->ipv6 = ipv6;
 	/* If this is the outermost IP header then this is the packet length. */
 	if (is_outer)
@@ -442,32 +440,24 @@ error_out:
 	return PACKET_BAD;
 }
 
-/* Parse the ICMPv4 header. Return a packet_parse_result_t. */
-static int parse_icmpv4(struct packet *packet, u8 *layer4_start,
-			int layer4_bytes, u8 *packet_end, char **error)
+/* Parse the ICMP header. Return a packet_parse_result_t. */
+static int parse_icmpv4(struct packet *packet, u8 *layer4_start, int layer4_bytes,
+			u8 *packet_end, char **error)
 {
 	struct header *icmp_header = NULL;
-	const int icmp_header_len = sizeof(struct icmpv4);
 	u8 *p = layer4_start;
 
 	assert(layer4_bytes >= 0);
-	/* Make sure the immediately preceding header was IPv4. */
-	if (packet_inner_header(packet)->type != HEADER_IPV4) {
-		asprintf(error, "Bad IP version for IPPROTO_ICMP");
-		goto error_out;
-	}
-
-	if (layer4_bytes < sizeof(struct icmpv4)) {
+	const int icmpv4_len = sizeof(struct icmpv4);
+	if (layer4_bytes < icmpv4_len) {
 		asprintf(error, "Truncated ICMPv4 header");
 		goto error_out;
 	}
-
 	packet->icmpv4 = (struct icmpv4 *) p;
+	icmp_header = packet_append_header(packet, HEADER_ICMPV4, icmpv4_len);
 
-	icmp_header = packet_append_header(packet, HEADER_ICMPV4,
-					   icmp_header_len);
 	if (icmp_header == NULL) {
-		asprintf(error, "Too many nested headers at ICMPV4 header");
+		asprintf(error, "Too many nested headers at ICMP header");
 		goto error_out;
 	}
 	icmp_header->total_bytes = layer4_bytes;
@@ -475,37 +465,31 @@ static int parse_icmpv4(struct packet *packet, u8 *layer4_start,
 	p += layer4_bytes;
 	assert(p <= packet_end);
 
+	DEBUGP("ICMPv4 type: %d\n", packet->icmpv4->type);
+	DEBUGP("ICMPv4 code: %d\n", packet->icmpv4->code);
 	return PACKET_OK;
 
 error_out:
 	return PACKET_BAD;
 }
 
-/* Parse the ICMPv6 header. Return a packet_parse_result_t. */
-static int parse_icmpv6(struct packet *packet, u8 *layer4_start,
-			int layer4_bytes, u8 *packet_end, char **error)
+static int parse_icmpv6(struct packet *packet, u8 *layer4_start, int layer4_bytes,
+			u8 *packet_end, char **error)
 {
 	struct header *icmp_header = NULL;
-	const int icmp_header_len = sizeof(struct icmpv6);
 	u8 *p = layer4_start;
 
 	assert(layer4_bytes >= 0);
-	/* Make sure the immediately preceding header was IPv6. */
-	if (packet_inner_header(packet)->type != HEADER_IPV6) {
-		asprintf(error, "Bad IP version for IPPROTO_ICMPV6");
-		goto error_out;
-	}
-	if (layer4_bytes < sizeof(struct icmpv6)) {
+	const int icmpv6_len = sizeof(struct icmpv6);
+	if (layer4_bytes < icmpv6_len) {
 		asprintf(error, "Truncated ICMPv6 header");
 		goto error_out;
 	}
-
 	packet->icmpv6 = (struct icmpv6 *) p;
+	icmp_header = packet_append_header(packet, HEADER_ICMPV6, icmpv6_len);
 
-	icmp_header = packet_append_header(packet, HEADER_ICMPV6,
-					   icmp_header_len);
 	if (icmp_header == NULL) {
-		asprintf(error, "Too many nested headers at ICMPV6 header");
+		asprintf(error, "Too many nested headers at ICMP header");
 		goto error_out;
 	}
 	icmp_header->total_bytes = layer4_bytes;
@@ -513,6 +497,8 @@ static int parse_icmpv6(struct packet *packet, u8 *layer4_start,
 	p += layer4_bytes;
 	assert(p <= packet_end);
 
+	DEBUGP("ICMPv6 type: %d\n", packet->icmpv6->type);
+	DEBUGP("ICMPv6 code: %d\n", packet->icmpv6->code);
 	return PACKET_OK;
 
 error_out:
@@ -528,7 +514,7 @@ static int parse_gre(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 	struct gre *gre = (struct gre *) p;
 
 	assert(layer4_bytes >= 0);
-	if (layer4_bytes < sizeof(struct gre)) {
+	if (layer4_bytes < GRE_MINLEN) {
 		asprintf(error, "Truncated GRE header");
 		goto error_out;
 	}
@@ -541,7 +527,7 @@ static int parse_gre(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 		goto error_out;
 	}
 	const int gre_header_len = gre_len(gre);
-	if (gre_header_len < sizeof(struct gre)) {
+	if (gre_header_len < GRE_MINLEN) {
 		asprintf(error, "GRE header length too small for GRE header");
 		goto error_out;
 	}
@@ -563,7 +549,7 @@ static int parse_gre(struct packet *packet, u8 *layer4_start, int layer4_bytes,
 
 	p += gre_header_len;
 	assert(p <= packet_end);
-	return parse_layer3_packet_by_proto(packet, ntohs(gre->protocol),
+	return parse_layer3_packet_by_proto(packet, ntohs(gre->proto),
 					    p, packet_end, error);
 
 error_out:
@@ -613,33 +599,26 @@ error_out:
 
 static int parse_layer4(struct packet *packet, u8 *layer4_start,
 			int layer4_protocol, int layer4_bytes,
-			u8 *packet_end, bool *is_inner, char **error)
+			u8 *packet_end, char **error)
 {
 	if (layer4_protocol == IPPROTO_TCP) {
-		*is_inner = true;	/* found inner-most layer 4 */
 		return parse_tcp(packet, layer4_start, layer4_bytes, packet_end,
 				 error);
 	} else if (layer4_protocol == IPPROTO_UDP) {
-		*is_inner = true;	/* found inner-most layer 4 */
 		return parse_udp(packet, layer4_start, layer4_bytes, packet_end,
 				 error);
 	} else if (layer4_protocol == IPPROTO_ICMP) {
-		*is_inner = true;	/* found inner-most layer 4 */
-		return parse_icmpv4(packet, layer4_start, layer4_bytes,
-				    packet_end, error);
+		return parse_icmpv4(packet, layer4_start, layer4_bytes, packet_end,
+				    error);
 	} else if (layer4_protocol == IPPROTO_ICMPV6) {
-		*is_inner = true;	/* found inner-most layer 4 */
-		return parse_icmpv6(packet, layer4_start, layer4_bytes,
-				    packet_end, error);
+		return parse_icmpv6(packet, layer4_start, layer4_bytes, packet_end,
+				    error);
 	} else if (layer4_protocol == IPPROTO_GRE) {
-		*is_inner = false;
 		return parse_gre(packet, layer4_start, layer4_bytes, packet_end,
 				 error);
 	} else if (layer4_protocol == IPPROTO_IPIP) {
-		*is_inner = false;
 		return parse_ipv4(packet, layer4_start, packet_end, error);
 	} else if (layer4_protocol == IPPROTO_IPV6) {
-		*is_inner = false;
 		return parse_ipv6(packet, layer4_start, packet_end, error);
 	}
 	return PACKET_UNKNOWN_L4;

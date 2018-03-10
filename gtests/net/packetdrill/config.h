@@ -40,6 +40,52 @@
 
 extern struct option options[];
 
+/* A linked list of symbol->value (FOO=bar) definitions from command line. */
+struct definition {
+	char *symbol;	/* name of the symbol; owns the string */
+	char *value;	/* value of the symbol; owns the string */
+	struct definition *next;	/* link for linked list */
+};
+
+/* Return the definition in the linked list with a matching symbol, or NULL */
+static inline struct definition *definition_find(struct definition *defs,
+						 char *symbol)
+{
+	struct definition *def = NULL;
+
+	for (def = defs; def != NULL; def = def->next) {
+		if (strcmp(def->symbol, symbol) == 0)
+			return def;
+	}
+	return NULL;
+}
+
+/* Set the value of the given symbol to the given value. */
+static inline void definition_set(struct definition **defs,
+				  char *symbol, char *value)
+{
+	struct definition *def = definition_find(*defs, symbol);
+
+	if (def) {
+		free(def->value);
+		def->value = value;
+	} else {
+		def = calloc(1, sizeof(struct definition));
+		def->symbol = symbol;
+		def->value = value;
+		def->next = *defs;	/* link to existing entries */
+		*defs = def;	/* insert at head of linked list */
+	}
+}
+
+/* Return the value of the given symbol, or NULL if not found. */
+static inline char *definition_get(struct definition *defs, char *symbol)
+{
+	struct definition *def = definition_find(defs, symbol);
+
+	return def ? def->value : NULL;
+}
+
 struct config {
 	const char **argv;			/* a copy of process argv */
 
@@ -68,6 +114,7 @@ struct config {
 	int live_prefix_len;		/* IPv4/IPv6 interface prefix len */
 
 	int tolerance_usecs;		/* tolerance for time divergence */
+	bool tcp_ts_ecr_scaled;		/* scale arbitrary inbound TS ECR? */
 	int tcp_ts_tick_usecs;		/* microseconds per TS val tick */
 
 	u32 speed;			/* speed reported by tun driver;
@@ -78,6 +125,7 @@ struct config {
 
 	bool non_fatal_packet;		/* treat packet asserts as non-fatal */
 	bool non_fatal_syscall;		/* treat syscall asserts as non-fatal */
+	bool send_omit_free;		/* do not call free() */
 
 	bool dry_run;			/* parse script but don't execute? */
 
@@ -90,7 +138,7 @@ struct config {
 	/* Language to emit when generating post-processing code */
 	char *code_format;
 
-	/* setsockopt option number (TCP_INFO) for code */
+	/* setsockopt option number (TCP_INFO, ...) for code */
 	char *code_sockopt;
 
 	/* File scripts to run at beginning of test (using system) */
@@ -104,6 +152,16 @@ struct config {
 	struct ip_address wire_server_ip;  /* IP of on-the-wire server */
 	char *wire_server_ip_string;	   /* malloc-ed server IP string */
 	u16 wire_server_port;		   /* the port the server listens on */
+
+	/* For testing against a shared object (*.so) file. */
+	char *so_filename;
+	char *so_flags;
+
+	/* For anyip testing */
+	bool is_anyip;
+
+	/* List of FOO=bar definitions from command line. */
+	struct definition *defines;
 };
 
 /* Top-level info about the invocation of a test script */

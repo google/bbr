@@ -39,10 +39,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/unistd.h>
+#include <sys/epoll.h>
 
 #include <linux/sockios.h>
+#include <linux/capability.h>
 
+#include "epoll.h"
+#include "ip.h"
 #include "tcp.h"
+#include "capability.h"
 
 /* A table of platform-specific string->int mappings. */
 struct int_symbol platform_symbols_table[] = {
@@ -62,6 +67,7 @@ struct int_symbol platform_symbols_table[] = {
 	{ SO_ERROR,                         "SO_ERROR"                        },
 	{ SO_KEEPALIVE,                     "SO_KEEPALIVE"                    },
 	{ SO_LINGER,                        "SO_LINGER"                       },
+	{ SO_MARK,                          "SO_MARK"                         },
 	{ SO_NO_CHECK,                      "SO_NO_CHECK"                     },
 	{ SO_OOBINLINE,                     "SO_OOBINLINE"                    },
 	{ SO_PASSCRED,                      "SO_PASSCRED"                     },
@@ -81,20 +87,76 @@ struct int_symbol platform_symbols_table[] = {
 	{ SO_SNDLOWAT,                      "SO_SNDLOWAT"                     },
 	{ SO_SNDTIMEO,                      "SO_SNDTIMEO"                     },
 	{ SO_TIMESTAMP,                     "SO_TIMESTAMP"                    },
+	{ SO_TIMESTAMPING,		    "SO_TIMESTAMPING"		      },
 	{ SO_TYPE,                          "SO_TYPE"                         },
+	{ SO_MAX_PACING_RATE,		    "SO_MAX_PACING_RATE"	      },
+	{ SO_ZEROCOPY,			    "SO_ZEROCOPY"		      },
+
+	{ SO_EE_ORIGIN_TIMESTAMPING,	    "SO_EE_ORIGIN_TIMESTAMPING"	      },
+	{ SO_EE_ORIGIN_ZEROCOPY,	    "SO_EE_ORIGIN_ZEROCOPY"	      },
+
+	{ SO_EE_CODE_ZEROCOPY_COPIED,	    "SO_EE_CODE_ZEROCOPY_COPIED"      },
+
+	{ SOF_TIMESTAMPING_TX_HARDWARE,	    "SOF_TIMESTAMPING_TX_HARDWARE"    },
+	{ SOF_TIMESTAMPING_TX_SOFTWARE,	    "SOF_TIMESTAMPING_TX_SOFTWARE"    },
+	{ SOF_TIMESTAMPING_RX_HARDWARE,	    "SOF_TIMESTAMPING_RX_HARDWARE"    },
+	{ SOF_TIMESTAMPING_RX_SOFTWARE,	    "SOF_TIMESTAMPING_RX_SOFTWARE"    },
+	{ SOF_TIMESTAMPING_SOFTWARE,	    "SOF_TIMESTAMPING_SOFTWARE"       },
+	{ SOF_TIMESTAMPING_SYS_HARDWARE,    "SOF_TIMESTAMPING_SYS_HARDWARE"   },
+	{ SOF_TIMESTAMPING_RAW_HARDWARE,    "SOF_TIMESTAMPING_RAW_HARDWARE"   },
+	{ SOF_TIMESTAMPING_OPT_ID,	    "SOF_TIMESTAMPING_OPT_ID"	      },
+	{ SOF_TIMESTAMPING_TX_SCHED,	    "SOF_TIMESTAMPING_TX_SCHED"       },
+	{ SOF_TIMESTAMPING_TX_ACK,	    "SOF_TIMESTAMPING_TX_ACK"         },
+	{ SOF_TIMESTAMPING_OPT_CMSG,	    "SOF_TIMESTAMPING_OPT_CMSG"       },
+	{ SOF_TIMESTAMPING_OPT_TSONLY,	    "SOF_TIMESTAMPING_OPT_TSONLY"     },
+	{ SOF_TIMESTAMPING_OPT_STATS,	    "SOF_TIMESTAMPING_OPT_STATS"      },
+
+	{ SCM_TIMESTAMPING,		    "SCM_TIMESTAMPING"		      },
+	{ SCM_TSTAMP_SND,		    "SCM_TSTAMP_SND"		      },
+	{ SCM_TSTAMP_SCHED,		    "SCM_TSTAMP_SCHED"		      },
+	{ SCM_TSTAMP_ACK,		    "SCM_TSTAMP_ACK"		      },
+	{ SCM_TIMESTAMPING_OPT_STATS,       "SCM_TIMESTAMPING_OPT_STATS"      },
+
+	{ _TCP_NLA_BUSY,                    "TCP_NLA_BUSY"                    },
+	{ _TCP_NLA_RWND_LIMITED,            "TCP_NLA_RWND_LIMITED"            },
+	{ _TCP_NLA_SNDBUF_LIMITED,          "TCP_NLA_SNDBUF_LIMITED"          },
+	{ _TCP_NLA_DATA_SEGS_OUT,           "TCP_NLA_DATA_SEGS_OUT"           },
+	{ _TCP_NLA_TOTAL_RETRANS,           "TCP_NLA_TOTAL_RETRANS"           },
+	{ _TCP_NLA_PACING_RATE,             "TCP_NLA_PACING_RATE"             },
+	{ _TCP_NLA_DELIVERY_RATE,           "TCP_NLA_DELIVERY_RATE"           },
+	{ _TCP_NLA_SND_CWND,                "TCP_NLA_SND_CWND"                },
+	{ _TCP_NLA_REORDERING,              "TCP_NLA_REORDERING"              },
+	{ _TCP_NLA_MIN_RTT,                 "TCP_NLA_MIN_RTT"                 },
+	{ _TCP_NLA_RECUR_RETRANS,           "TCP_NLA_RECUR_RETRANS"           },
+	{ _TCP_NLA_DELIVERY_RATE_APP_LMT,   "TCP_NLA_DELIVERY_RATE_APP_LMT"   },
+	{ _TCP_NLA_SNDQ_SIZE,               "TCP_NLA_SNDQ_SIZE"               },
+	{ _TCP_NLA_CA_STATE,		    "TCP_NLA_CA_STATE"		      },
+
+	{ _TCP_CA_Open,			    "TCP_CA_OPEN"		      },
+	{ _TCP_CA_Disorder,		    "TCP_CA_DISORDER"		      },
+	{ _TCP_CA_CWR,			    "TCP_CA_CWR"		      },
+	{ _TCP_CA_Recovery,		    "TCP_CA_RECOVERY"		      },
+	{ _TCP_CA_Loss,			    "TCP_CA_LOSS"		      },
 
 	{ IP_TOS,                           "IP_TOS"                          },
 	{ IP_MTU_DISCOVER,                  "IP_MTU_DISCOVER"                 },
+	{ IPV6_MTU_DISCOVER,                "IPV6_MTU_DISCOVER"               },
 	{ IP_PMTUDISC_WANT,                 "IP_PMTUDISC_WANT"                },
 	{ IP_PMTUDISC_DONT,                 "IP_PMTUDISC_DONT"                },
 	{ IP_PMTUDISC_DO,                   "IP_PMTUDISC_DO"                  },
 	{ IP_PMTUDISC_PROBE,                "IP_PMTUDISC_PROBE"               },
+	{ IP_RECVERR,			    "IP_RECVERR"		      },
+	{ IPV6_RECVERR,			    "IPV6_RECVERR"		      },
+	{ IP_FREEBIND,                      "IP_FREEBIND"                     },
+	{ IP_TTL,                           "IP_TTL"                          },
 #ifdef IP_MTU
 	{ IP_MTU,                           "IP_MTU"                          },
 #endif
 #ifdef IPV6_MTU
 	{ IPV6_MTU,                         "IPV6_MTU"                        },
 #endif
+	{ IPV6_TCLASS,                      "IPV6_TCLASS"                     },
+	{ IPV6_HOPLIMIT,                    "IPV6_HOPLIMIT"                   },
 
 	{ TCP_NODELAY,                      "TCP_NODELAY"                     },
 	{ TCP_MAXSEG,                       "TCP_MAXSEG"                      },
@@ -105,7 +167,6 @@ struct int_symbol platform_symbols_table[] = {
 	{ TCP_SYNCNT,                       "TCP_SYNCNT"                      },
 	{ TCP_LINGER2,                      "TCP_LINGER2"                     },
 	{ TCP_DEFER_ACCEPT,                 "TCP_DEFER_ACCEPT"                },
-	{ TCP_WINDOW_CLAMP,                 "TCP_WINDOW_CLAMP"                },
 	{ TCP_INFO,                         "TCP_INFO"                        },
 	{ TCP_QUICKACK,                     "TCP_QUICKACK"                    },
 	{ TCP_CONGESTION,                   "TCP_CONGESTION"                  },
@@ -114,6 +175,10 @@ struct int_symbol platform_symbols_table[] = {
 	{ TCP_THIN_LINEAR_TIMEOUTS,         "TCP_THIN_LINEAR_TIMEOUTS"        },
 	{ TCP_THIN_DUPACK,                  "TCP_THIN_DUPACK"                 },
 	{ TCP_USER_TIMEOUT,                 "TCP_USER_TIMEOUT"                },
+	{ TCP_FASTOPEN,                     "TCP_FASTOPEN"                    },
+	{ TCP_FASTOPEN_CONNECT,             "TCP_FASTOPEN_CONNECT"            },
+	{ TCP_TIMESTAMP,                    "TCP_TIMESTAMP"                   },
+	{ TCP_NOTSENT_LOWAT,                "TCP_NOTSENT_LOWAT"               },
 
 	{ O_RDONLY,                         "O_RDONLY"                        },
 	{ O_WRONLY,                         "O_WRONLY"                        },
@@ -186,6 +251,7 @@ struct int_symbol platform_symbols_table[] = {
 	{ MSG_MORE,                         "MSG_MORE"                        },
 	{ MSG_CMSG_CLOEXEC,                 "MSG_CMSG_CLOEXEC"                },
 	{ MSG_FASTOPEN,                     "MSG_FASTOPEN"                    },
+	{ MSG_ZEROCOPY,                     "MSG_ZEROCOPY"                    },
 
 #ifdef SIOCINQ
 	{ SIOCINQ,                          "SIOCINQ"                         },
@@ -356,6 +422,73 @@ struct int_symbol platform_symbols_table[] = {
 	{ EOWNERDEAD,                       "EOWNERDEAD"                      },
 	{ ENOTRECOVERABLE,                  "ENOTRECOVERABLE"                 },
 	{ ERFKILL,                          "ERFKILL"                         },
+	/* cap_flag */
+	{ CAP_EFFECTIVE,                    "CAP_EFFECTIVE"                   },
+	{ CAP_PERMITTED,                    "CAP_PERMITTED"                   },
+	{ CAP_INHERITABLE,                  "CAP_INHERITABLE"                 },
+	/* cap_option */
+	{ CAP_SET,                          "CAP_SET"                         },
+	{ CAP_CLEAR,                        "CAP_CLEAR"                       },
+	{ CAP_CHOWN,                        "CAP_CHOWN"                       },
+	/* linux capabilities */
+	{ CAP_DAC_OVERRIDE,                 "CAP_DAC_OVERRIDE"                },
+	{ CAP_DAC_READ_SEARCH,              "CAP_DAC_READ_SEARCH"             },
+	{ CAP_FOWNER,                       "CAP_FOWNER"                      },
+	{ CAP_FSETID,                       "CAP_FSETID"                      },
+	{ CAP_KILL,                         "CAP_KILL"                        },
+	{ CAP_SETGID,                       "CAP_SETGID"                      },
+	{ CAP_SETUID,                       "CAP_SETUID"                      },
+	{ CAP_SETPCAP,                      "CAP_SETPCAP"                     },
+	{ CAP_LINUX_IMMUTABLE,              "CAP_LINUX_IMMUTABLE"             },
+	{ CAP_NET_BIND_SERVICE,             "CAP_NET_BIND_SERVICE"            },
+	{ CAP_NET_BROADCAST,                "CAP_NET_BROADCAST"               },
+	{ CAP_NET_ADMIN,                    "CAP_NET_ADMIN"                   },
+	{ CAP_NET_RAW,                      "CAP_NET_RAW"                     },
+	{ CAP_IPC_LOCK,                     "CAP_IPC_LOCK"                    },
+	{ CAP_IPC_OWNER,                    "CAP_IPC_OWNER"                   },
+	{ CAP_SYS_MODULE,                   "CAP_SYS_MODULE"                  },
+	{ CAP_SYS_RAWIO,                    "CAP_SYS_RAWIO"                   },
+	{ CAP_SYS_CHROOT,                   "CAP_SYS_CHROOT"                  },
+	{ CAP_SYS_PTRACE,                   "CAP_SYS_PTRACE"                  },
+	{ CAP_SYS_PACCT,                    "CAP_SYS_PACCT"                   },
+	{ CAP_SYS_ADMIN,                    "CAP_SYS_ADMIN"                   },
+	{ CAP_SYS_BOOT,                     "CAP_SYS_BOOT"                    },
+	{ CAP_SYS_NICE,                     "CAP_SYS_NICE"                    },
+	{ CAP_SYS_RESOURCE,                 "CAP_SYS_RESOURCE"                },
+	{ CAP_SYS_TIME,                     "CAP_SYS_TIME"                    },
+	{ CAP_SYS_TTY_CONFIG,               "CAP_SYS_TTY_CONFIG"              },
+	{ CAP_MKNOD,                        "CAP_MKNOD"                       },
+	{ CAP_LEASE,                        "CAP_LEASE"                       },
+	{ CAP_AUDIT_WRITE,                  "CAP_AUDIT_WRITE"                 },
+	{ CAP_AUDIT_CONTROL,                "CAP_AUDIT_CONTROL"               },
+	{ CAP_SETFCAP,                      "CAP_SETFCAP"                     },
+	{ CAP_MAC_OVERRIDE,                 "CAP_MAC_OVERRIDE"                },
+	{ CAP_MAC_ADMIN,                    "CAP_MAC_ADMIN"                   },
+	{ CAP_SYSLOG,                       "CAP_SYSLOG"                      },
+	{ CAP_WAKE_ALARM,                   "CAP_WAKE_ALARM"                  },
+	{ CAP_BLOCK_SUSPEND,                "CAP_BLOCK_SUSPEND"               },
+	{ EPOLLIN,                          "EPOLLIN"                         },
+	{ EPOLLPRI,                         "EPOLLPRI"                        },
+	{ EPOLLOUT,                         "EPOLLOUT"                        },
+	{ EPOLLRDNORM,                      "EPOLLRDNORM"                     },
+	{ EPOLLRDBAND,                      "EPOLLRDBAND"                     },
+	{ EPOLLWRNORM,                      "EPOLLWRNORM"                     },
+	{ EPOLLWRBAND,                      "EPOLLWRBAND"                     },
+	{ EPOLLMSG,                         "EPOLLMSG"                        },
+	{ EPOLLERR,                         "EPOLLERR"                        },
+	{ EPOLLHUP,                         "EPOLLHUP"                        },
+	{ EPOLLRDHUP,                       "EPOLLRDHUP"                      },
+	{ EPOLLONESHOT,                     "EPOLLONESHOT"                    },
+	{ EPOLLET,                          "EPOLLET"                         },
+	{ EPOLLEXCLUSIVE,                   "EPOLLEXCLUSIVE"		      },
+	{ EPOLL_CTL_ADD,                    "EPOLL_CTL_ADD"                   },
+	{ EPOLL_CTL_MOD,                    "EPOLL_CTL_MOD"                   },
+	{ EPOLL_CTL_DEL,                    "EPOLL_CTL_DEL"                   },
+	{ SPLICE_F_MOVE,                    "SPLICE_F_MOVE"                   },
+	{ SPLICE_F_NONBLOCK,                "SPLICE_F_NONBLOCK"               },
+	{ SPLICE_F_MORE,                    "SPLICE_F_MORE"                   },
+	{ SPLICE_F_GIFT,                    "SPLICE_F_GIFT"                   },
+	{ AF_UNSPEC,                        "AF_UNSPEC"                       },
 
 	/* Sentinel marking the end of the table. */
 	{ 0, NULL },

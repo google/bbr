@@ -38,9 +38,9 @@
 	}
 
 /* Log the message to stderr and then exit with a failure status code. */
-extern void die(char *format, ...);
+extern void __attribute__((noreturn)) die(char *format, ...);
 
 /* Call perror() with message and then exit with a failure status code. */
-extern void die_perror(char *message);
+extern void __attribute__((noreturn)) die_perror(char *message);
 
 #endif /* __LOGGING_H__ */

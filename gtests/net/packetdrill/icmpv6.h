@@ -47,6 +47,10 @@ struct icmpv6 {
 		struct {
 			__be32	pointer;
 		} parameter_problem;
+		struct icmpv6_echo {
+			__be16	identifier;
+			__be16	sequence;
+		} u_echo;
 	} message;
 };
 
@@ -55,6 +59,8 @@ struct icmpv6 {
 #define ICMPV6_PKT_TOOBIG		2
 #define ICMPV6_TIME_EXCEED		3
 #define ICMPV6_PARAMPROB		4
+#define ICMPV6_ECHO_REQUEST		128
+#define ICMPV6_ECHO_REPLY		129
 
 /* Codes for ICMPV6 Destination Unreachable */
 #define ICMPV6_NOROUTE			0

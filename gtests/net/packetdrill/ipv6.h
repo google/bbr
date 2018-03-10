@@ -56,10 +56,24 @@ struct ipv6 {
 	struct	in6_addr	dst_ip;
 };
 
-/* ECN: RFC 3168: http://tools.ietf.org/html/rfc3168 */
-static inline u8 ipv6_ecn_bits(const struct ipv6 *ipv6)
+#ifdef linux
+#define IPV6_HOPLIMIT   52
+#define IPV6_TCLASS	67
+#endif  /* linux */
+
+static inline u8 ipv6_tos_byte(const struct ipv6 *ipv6)
 {
-	return ipv6->traffic_class_lo & IP_ECN_MASK;
+	return (ipv6->traffic_class_hi << 4) | ipv6->traffic_class_lo;
+}
+
+static inline u32 ipv6_flow_label(const struct ipv6 *ipv6)
+{
+	return (ntohs(ipv6->flow_label_lo)) | (ipv6->flow_label_hi << 16);
+}
+
+static inline u8 ipv6_hoplimit_byte(const struct ipv6 *ipv6)
+{
+	return ipv6->hop_limit;
 }
 
 /* The following struct declaration is needed for the IPv6 ioctls

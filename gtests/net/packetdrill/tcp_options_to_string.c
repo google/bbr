@@ -26,23 +26,49 @@
 
 #include "tcp_options_iterator.h"
 
+/* If the MD5 digest option is in the valid range of sizes, print the MD5
+ * option and digest and return STATUS_OK. Otherwise, return STATUS_ERR.
+ */
+static int tcp_md5_option_to_string(FILE *s, struct tcp_option *option)
+{
+	int digest_bytes, i;
+
+	if (option->length < TCPOLEN_MD5_BASE ||
+	    option->length > TCPOLEN_MD5SIG)
+		return STATUS_ERR;
+
+	digest_bytes = option->length - TCPOLEN_MD5_BASE;
+	fprintf(s, "md5");
+	if (digest_bytes > 0)
+		fprintf(s, " ");
+	for (i = 0; i < digest_bytes; ++i)
+		fprintf(s, "%02x", option->data.md5.digest[i]);
+	return STATUS_OK;
+}
+
 /* See if the given experimental option is a TFO option, and if so
  * then print the TFO option and return STATUS_OK. Otherwise, return
  * STATUS_ERR.
  */
-static int tcp_fast_open_option_to_string(FILE *s, struct tcp_option *option)
+static int tcp_fast_open_option_to_string(FILE *s, struct tcp_option *option,
+					  bool exp)
 {
-	if ((option->length < TCPOLEN_EXP_FASTOPEN_BASE) ||
-	    (ntohs(option->data.fast_open.magic) != TCPOPT_FASTOPEN_MAGIC))
+	if (exp && ((option->length < TCPOLEN_EXP_FASTOPEN_BASE) ||
+	    (ntohs(option->data.fast_open_exp.magic) != TCPOPT_FASTOPEN_MAGIC)))
 		return STATUS_ERR;
 
-	fprintf(s, "FO ");
-	int cookie_bytes = option->length - TCPOLEN_EXP_FASTOPEN_BASE;
+	fprintf(s, exp ? "FOEXP" : "FO");
+	int cookie_bytes = option->length - (exp ? TCPOLEN_EXP_FASTOPEN_BASE :
+						   TCPOLEN_FASTOPEN_BASE);
 	assert(cookie_bytes >= 0);
-	assert(cookie_bytes <= MAX_TCP_FAST_OPEN_COOKIE_BYTES);
+	assert(cookie_bytes <= (exp ? MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES :
+				      MAX_TCP_FAST_OPEN_COOKIE_BYTES));
+	if (cookie_bytes > 0)
+		fprintf(s, " ");
 	int i;
 	for (i = 0; i < cookie_bytes; ++i)
-		fprintf(s, "%02x", option->data.fast_open.cookie[i]);
+		fprintf(s, "%02x", exp ? option->data.fast_open_exp.cookie[i] :
+					 option->data.fast_open.cookie[i]);
 	return STATUS_OK;
 }
 
@@ -106,8 +132,16 @@ int tcp_options_to_string(struct packet *packet,
 				ntohl(option->data.time_stamp.ecr));
 			break;
 
+		case TCPOPT_MD5SIG:
+			tcp_md5_option_to_string(s, option);
+			break;
+
+		case TCPOPT_FASTOPEN:
+			tcp_fast_open_option_to_string(s, option, false);
+			break;
+
 		case TCPOPT_EXP:
-			if (tcp_fast_open_option_to_string(s, option)) {
+			if (tcp_fast_open_option_to_string(s, option, true)) {
 				asprintf(error,
 					 "unknown experimental option");
 				goto out;

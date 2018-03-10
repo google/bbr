@@ -31,8 +31,8 @@
 
 #include "types.h"
 
-#include <assert.h>
 #include <sys/time.h>
+#include "assert.h"
 #include "gre.h"
 #include "icmp.h"
 #include "icmpv6.h"

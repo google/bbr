@@ -30,6 +30,8 @@
 #include "ip_address.h"
 #include "wire_protocol.h"
 
+struct config;
+
 /* Buffer holding input or output data for a TCP socket. */
 struct wire_conn_buffer {
 	char *buf;	/* malloc-allocated buffer */
@@ -56,10 +58,12 @@ void wire_conn_free(struct wire_conn *conn);
 
 /* Blocking connect. */
 void wire_conn_connect(struct wire_conn *conn,
-		       const struct ip_address *ip, u16 port);
+		       const struct ip_address *ip, u16 port,
+		       enum ip_version_t ip_version);
 
 /* Blocking bind and listen. */
-void wire_conn_bind_listen(struct wire_conn *listen_conn, u16 port);
+void wire_conn_bind_listen(struct wire_conn *listen_conn, u16 port,
+				enum ip_version_t ip_version);
 
 /* Blocking accept. */
 void wire_conn_accept(struct wire_conn *listen_conn,

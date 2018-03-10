@@ -25,9 +25,9 @@
 
 #include "packet.h"
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include "assert.h"
 #include "ethernet.h"
 #include "gre_packet.h"
 #include "ip_packet.h"
@@ -152,7 +152,7 @@ static struct packet *packet_copy_with_headroom(struct packet *old_packet,
 	packet->direction	= old_packet->direction;
 	packet->time_usecs	= old_packet->time_usecs;
 	packet->flags		= old_packet->flags;
-	packet->ecn		= old_packet->ecn;
+	packet->tos_chk		= old_packet->tos_chk;
 
 	packet_copy_headers(packet, old_packet, bytes_headroom);
 
@@ -168,6 +168,7 @@ static struct packet *packet_copy_with_headroom(struct packet *old_packet,
 					     old_packet->tcp_ts_val);
 	packet->tcp_ts_ecr	= offset_ptr(old_base, new_base,
 					     old_packet->tcp_ts_ecr);
+	packet->echoed_header		= old_packet->echoed_header;
 
 	return packet;
 }

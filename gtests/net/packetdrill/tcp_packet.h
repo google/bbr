@@ -37,12 +37,15 @@
  */
 extern struct packet *new_tcp_packet(int address_family,
 				     enum direction_t direction,
-				     enum ip_ecn_t ecn,
+				     struct ip_info ip_info,
+				     u16 src_port,
+				     u16 dst_port,
 				     const char *flags,
 				     u32 start_sequence,
 				     u16 tcp_payload_bytes,
 				     u32 ack_sequence,
 				     s32 window,
+				     u16 urg_ptr,
 				     const struct tcp_options *tcp_options,
 				     char **error);
 #endif /* __TCP_PACKET_H__ */

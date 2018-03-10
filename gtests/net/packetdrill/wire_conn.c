@@ -33,6 +33,7 @@
 
 #include "logging.h"
 #include "tcp.h"
+#include "wrap.h"
 
 /* Cap the max message we're willing to read, so remote side can't OOM us. */
 #define MAX_MESSAGE_BYTES (10*1000*1000)
@@ -56,12 +57,11 @@ void wire_conn_free(struct wire_conn *conn)
 }
 
 /* Create the TCP socket. */
-static void create_tcp_socket(struct wire_conn *conn)
+static void create_tcp_socket(struct wire_conn *conn,
+				enum ip_version_t ip_version)
 {
 	assert(conn->fd == -1);
-	conn->fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (conn->fd < 0)
-		die_perror("socket");
+	conn->fd = wrap_socket(ip_version, SOCK_STREAM);
 }
 
 /* Set default TCP socket options for decent performance. */
@@ -92,13 +92,15 @@ static void set_default_tcp_options(struct wire_conn *conn)
 }
 
 void wire_conn_connect(struct wire_conn *conn,
-		       const struct ip_address *ip, u16 port)
+			const struct ip_address *ip,
+			u16 port,
+			enum ip_version_t ip_version)
 {
 	DEBUGP("wire_conn_connect\n");
 	struct sockaddr_storage sa;
 	socklen_t length = 0;
 
-	create_tcp_socket(conn);
+	create_tcp_socket(conn, ip_version);
 	set_default_tcp_options(conn);
 
 	/* Do a blocking connect to the server. */
@@ -110,13 +112,14 @@ void wire_conn_connect(struct wire_conn *conn,
 	}
 }
 
-void wire_conn_bind_listen(struct wire_conn *listen_conn, u16 port)
+void wire_conn_bind_listen(struct wire_conn *listen_conn,
+				u16 port,
+				enum ip_version_t ip_version)
 {
 	DEBUGP("wire_conn_bind_listen\n");
-	struct sockaddr_in sa_v4;
 	int val;
 
-	create_tcp_socket(listen_conn);
+	create_tcp_socket(listen_conn, ip_version);
 
 	val = 1;
 	if (setsockopt(listen_conn->fd, SOL_SOCKET, SO_REUSEADDR,
@@ -124,21 +127,7 @@ void wire_conn_bind_listen(struct wire_conn *listen_conn, u16 port)
 		die_perror("setsockopt SO_REUSEADDR");
 	}
 
-	memset(&sa_v4, 0, sizeof(sa_v4));
-#ifndef linux
-	sa_v4.sin_len = sizeof(sa_v4);
-#endif
-	sa_v4.sin_family = AF_INET;
-	sa_v4.sin_port = htons(port);
-	sa_v4.sin_addr.s_addr = INADDR_ANY;
-
-	if (bind(listen_conn->fd, (struct sockaddr *)&sa_v4,
-		 sizeof(sa_v4)) < 0) {
-		die_perror("bind");
-	}
-
-	if (listen(listen_conn->fd, 100) < 0)
-		die_perror("listen");
+	wrap_bind_listen(listen_conn->fd, ip_version, port);
 }
 
 void wire_conn_accept(struct wire_conn *listen_conn,

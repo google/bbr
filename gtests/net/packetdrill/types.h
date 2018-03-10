@@ -31,7 +31,6 @@
  * convention of including types.h first, before everything else.
  */
 #define _GNU_SOURCE		/* for asprintf */
-#include <assert.h>
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
@@ -40,6 +39,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 
+#include "assert.h"
 #include "platforms.h"
 
 /* We use some unconventional formatting here to avoid checkpatch.pl
@@ -60,22 +60,6 @@ typedef signed char s8;
 typedef signed short s16;
 typedef signed int s32;
 typedef signed long long s64;
-
-typedef u8 __u8;
-typedef u16 __u16;
-typedef u32 __u32;
-typedef u64 __u64;
-
-/* We also use kernel-style names for endian-specific unsigned types. */
-typedef u16 __le16;
-typedef u16 __be16;
-typedef u32 __le32;
-typedef u32 __be32;
-typedef u64 __le64;
-typedef u64 __be64;
-
-typedef u16 __sum16;
-typedef u32 __wsum;
 
 typedef u8 bool;
 enum bool_t {
@@ -112,6 +96,18 @@ static inline enum direction_t reverse_direction(enum direction_t direction)
 		assert(!"bad direction");
 }
 
+/* How to treat the TOS byte of a packet. */
+enum tos_chk_t {
+	TOS_CHECK_NONE,
+	TOS_CHECK_ECN,
+	TOS_CHECK_TOS,
+};
+
+struct tos_spec {
+	enum tos_chk_t check;
+	u8 value;
+};
+
 /* IPv4 ECN treatment for a packet. */
 enum ip_ecn_t {
 	ECN_NONE,
@@ -119,7 +115,14 @@ enum ip_ecn_t {
 	ECN_ECT1,
 	ECN_CE,
 	ECN_ECT01,
-	ECN_NOCHECK,
+};
+
+#define TTL_CHECK_NONE 255
+
+struct ip_info {
+	struct tos_spec tos;
+	u32 flow_label;
+	u8 ttl;
 };
 
 /* Length of output buffer for inet_ntop, plus prefix length (e.g. "/128"). */
@@ -184,6 +187,11 @@ static inline bool is_valid_u16(s64 x)
 static inline bool is_valid_u32(s64 x)
 {
 	return (x >= 0) && (x <= UINT_MAX);
+}
+
+static inline bool is_valid_u20(s64 x)
+{
+	return (x >= 0) && (x <= 0xfffff);
 }
 
 static inline s64 max(s64 a, s64 b)

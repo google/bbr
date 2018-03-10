@@ -27,15 +27,17 @@
 #include "ip_packet.h"
 #include "gre.h"
 
-int gre_header_append(struct packet *packet, char **error)
+int gre_header_append(struct packet *packet, const struct gre *gre, char **error)
 {
 	struct header *header;
 
-	header = packet_append_header(packet, HEADER_GRE, sizeof(struct gre));
+	header = packet_append_header(packet, HEADER_GRE, gre_len(gre));
 	if (header == NULL) {
 		asprintf(error, "too many headers");
 		return STATUS_ERR;
 	}
+
+	memcpy(header->h.gre, gre, gre_len(gre));
 
 	return STATUS_OK;
 }
@@ -44,9 +46,9 @@ int gre_header_finish(struct packet *packet,
 		      struct header *header, struct header *next_inner)
 {
 	struct gre *gre = header->h.gre;
-	int gre_bytes = sizeof(struct gre) + next_inner->total_bytes;
+	int gre_bytes = gre_len(gre) + next_inner->total_bytes;
 
-	gre->protocol = htons(header_type_info(next_inner->type)->eth_proto);
+	gre->proto = htons(header_type_info(next_inner->type)->eth_proto);
 
 	header->total_bytes = gre_bytes;
 

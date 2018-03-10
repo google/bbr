@@ -22,9 +22,9 @@
  * Test for parsing IP packets.
  */
 
+#include "assert.h"
 #include "packet_parser.h"
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -70,7 +70,6 @@ static void test_parse_tcp_ipv4_packet(void)
 
 	assert(packet->time_usecs	== 0);
 	assert(packet->flags		== 0);
-	assert(packet->ecn		== 0);
 
 	packet_free(packet);
 }
@@ -117,7 +116,6 @@ static void test_parse_tcp_ipv6_packet(void)
 
 	assert(packet->time_usecs	== 0);
 	assert(packet->flags		== 0);
-	assert(packet->ecn		== 0);
 
 	packet_free(packet);
 }
@@ -157,7 +155,6 @@ static void test_parse_udp_ipv4_packet(void)
 
 	assert(packet->time_usecs	== 0);
 	assert(packet->flags		== 0);
-	assert(packet->ecn		== 0);
 
 	packet_free(packet);
 }
@@ -201,7 +198,6 @@ static void test_parse_udp_ipv6_packet(void)
 
 	assert(packet->time_usecs	== 0);
 	assert(packet->flags		== 0);
-	assert(packet->ecn		== 0);
 
 	packet_free(packet);
 }
@@ -249,7 +245,7 @@ static void test_parse_ipv4_gre_ipv4_tcp_packet(void)
 
 	assert(packet->headers[i].type	== HEADER_GRE);
 	assert(packet->headers[i].h.ptr	== p);
-	assert(packet->headers[i].header_bytes == sizeof(struct gre));
+	assert(packet->headers[i].header_bytes == GRE_MINLEN);
 	p += packet->headers[i].header_bytes;
 	i++;
 
@@ -279,7 +275,6 @@ static void test_parse_ipv4_gre_ipv4_tcp_packet(void)
 
 	assert(packet->time_usecs	== 0);
 	assert(packet->flags		== 0);
-	assert(packet->ecn		== 0);
 
 	packet_free(packet);
 }
@@ -340,7 +335,7 @@ static void test_parse_ipv4_gre_mpls_ipv4_tcp_packet(void)
 
 	assert(packet->headers[i].type	== HEADER_GRE);
 	assert(packet->headers[i].h.ptr	== p);
-	assert(packet->headers[i].header_bytes == sizeof(struct gre));
+	assert(packet->headers[i].header_bytes == GRE_MINLEN);
 	p += packet->headers[i].header_bytes;
 	i++;
 
@@ -377,7 +372,6 @@ static void test_parse_ipv4_gre_mpls_ipv4_tcp_packet(void)
 
 	assert(packet->time_usecs	== 0);
 	assert(packet->flags		== 0);
-	assert(packet->ecn		== 0);
 
 	packet_free(packet);
 }
@@ -419,7 +413,6 @@ static void test_parse_icmpv4_packet(void)
 
 	assert(packet->time_usecs	== 0);
 	assert(packet->flags		== 0);
-	assert(packet->ecn		== 0);
 
 	packet_free(packet);
 }
@@ -472,7 +465,6 @@ static void test_parse_icmpv6_packet(void)
 
 	assert(packet->time_usecs	== 0);
 	assert(packet->flags		== 0);
-	assert(packet->ecn		== 0);
 
 	packet_free(packet);
 }
@@ -487,5 +479,6 @@ int main(void)
 	test_parse_ipv4_gre_mpls_ipv4_tcp_packet();
 	test_parse_icmpv4_packet();
 	test_parse_icmpv6_packet();
+
 	return 0;
 }

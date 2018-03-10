@@ -27,7 +27,7 @@
 
 #include "types.h"
 
-#include <assert.h>
+#include "assert.h"
 #include "config.h"
 #include "script.h"
 
@@ -52,8 +52,11 @@ extern void read_script(const char *script_path,
  * implementation for this function is in the bison parser file
  * parser.y.
  */
-extern int parse_script(const struct config *config,
+extern int parse_script(struct config *config,
 			struct script *script,
 			struct invocation *callback_invocation);
+
+/* Config for lexing and parsing. */
+extern struct config *in_config;
 
 #endif /* __PARSER_H__ */

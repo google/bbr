@@ -90,8 +90,31 @@ static int ipv6_header_to_string(FILE *s, struct packet *packet, int layer,
 static int gre_header_to_string(FILE *s, struct packet *packet, int layer,
 				enum dump_format_t format, char **error)
 {
-	fprintf(s, "gre: ");
+	const struct gre *gre = packet->headers[layer].h.gre;
+	int i = 0;
 
+	fprintf(s, "gre flags 0x%x proto 0x%04x",
+		ntohs(gre->flags),
+		ntohs(gre->proto));
+
+	if (gre->has_checksum || gre->has_routing) {
+		fprintf(s, " sum 0x%x off 0x%x",
+			ntohs(gre->be16[0]),
+			ntohs(gre->be16[1]));
+		i++;
+	}
+
+	if (gre->has_key) {
+		fprintf(s, " key 0x%x", ntohl(gre->be32[i]));
+		i++;
+	}
+
+	if (gre->has_seq) {
+		fprintf(s, " seq 0x%x", ntohl(gre->be32[i]));
+		i++;
+	}
+
+	fprintf(s, ": ");
 	return STATUS_OK;
 }
 

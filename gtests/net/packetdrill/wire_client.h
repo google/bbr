@@ -51,8 +51,7 @@ struct wire_client *wire_client_new(void);
 /* Initiate remote on-the-wire testing using a real NIC. */
 extern int wire_client_init(struct wire_client *wire_client,
 			    const struct config *config,
-			    const struct script *script,
-			    const struct state *state);
+			    const struct script *script);
 
 /* Delete a wire_client and its associated objects. */
 extern void wire_client_free(struct wire_client *wire_client);

@@ -28,12 +28,42 @@
 #include <string.h>
 #include "run.h"
 
+void socket_close(struct state *state, struct fd_state *fd)
+{
+	struct socket *socket = fd_to_socket(fd);
+
+	if (fd->live_fd >= 0 && !socket->fd.is_closed) {
+		assert(fd->script_fd >= 0);
+		DEBUGP("closing struct state socket "
+		       "live.fd:%d script.fd:%d\n",
+		       fd->live_fd, fd->script_fd);
+		if (close(fd->live_fd))
+			die_perror("close");
+	}
+	if (socket->protocol == IPPROTO_TCP &&
+	    socket->live.local.port != 0 &&
+	    socket->live.remote.port != 0 &&
+	    !state->config->is_wire_client &&
+	    reset_connection(state, socket)) {
+		die("error reseting connection\n");
+	}
+
+	socket_free(socket);
+}
+
+/* Global info about file descriptors that point to sockets. */
+struct fd_ops socket_ops = {
+	.type = FD_SOCKET,
+	.close = socket_close,
+};
+
 struct socket *socket_new(struct state *state)
 {
 	struct socket *socket = calloc(1, sizeof(struct socket));
+
+	socket->fd.ops = &socket_ops;
 	socket->ts_val_map = hash_map_new(1);
-	socket->next = state->sockets;	/* add socket to the linked list */
-	state->sockets = socket;
+	state_add_fd(state, to_fd(socket));
 	return socket;
 }
 

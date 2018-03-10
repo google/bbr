@@ -28,8 +28,8 @@
 
 #include "types.h"
 
-#include <assert.h>
 #include <sys/time.h>
+#include "assert.h"
 #include "gre.h"
 #include "header.h"
 #include "icmp.h"
@@ -95,6 +95,9 @@ struct packet {
 	struct udp *udp;	/* start of UDP header, if present */
 	struct icmpv4 *icmpv4;	/* start of ICMPv4 header, if present */
 	struct icmpv6 *icmpv6;	/* start of ICMPv6 header, if present */
+	bool echoed_header;     /* icmp payload is an echoed header?
+				   This is for TCP/UDP */
+
 
 	s64 time_usecs;		/* wall time of receive/send if non-zero */
 
@@ -102,7 +105,7 @@ struct packet {
 #define FLAG_WIN_NOCHECK	0x1  /* don't check TCP receive window */
 #define FLAG_OPTIONS_NOCHECK	0x2  /* don't check TCP options */
 
-	enum ip_ecn_t ecn;	/* IPv4/IPv6 ECN treatment for packet */
+	enum tos_chk_t tos_chk;	/* how to treat the TOS byte of a packet */
 
 	__be32 *tcp_ts_val;	/* location of TCP timestamp val, or NULL */
 	__be32 *tcp_ts_ecr;	/* location of TCP timestamp ecr, or NULL */
@@ -120,15 +123,6 @@ extern struct packet *packet_copy(struct packet *old_packet);
 
 /* Return the number of headers in the given packet. */
 extern int packet_header_count(const struct packet *packet);
-
-/* Return the inner-most header in the given packet. */
-static inline struct header *packet_inner_header(struct packet *packet)
-{
-	int num_headers = packet_header_count(packet);
-
-	assert(num_headers > 0);
-	return &packet->headers[num_headers - 1];
-}
 
 /* Attempt to append a new header to the given packet. Return a
  * pointer to the new header metadata, or NULL if we can't add the
@@ -241,6 +235,20 @@ static inline int packet_udp_header_len(const struct packet *packet)
 	return sizeof(struct udp);
 }
 
+/* Return the length of the ICMPv4 header. */
+static inline int packet_icmpv4_header_len(const struct packet *packet)
+{
+	assert(packet->icmpv4);
+	return sizeof(struct icmpv4);
+}
+
+/* Return the length of the ICMPv6 header. */
+static inline int packet_icmpv6_header_len(const struct packet *packet)
+{
+	assert(packet->icmpv6);
+	return sizeof(struct icmpv6);
+}
+
 /* Return the length of the TCP options. */
 static inline int packet_tcp_options_len(const struct packet *packet)
 {
@@ -282,7 +290,12 @@ static inline u8 *packet_payload(struct packet *packet)
 		return ((u8 *) packet->tcp) + packet_tcp_header_len(packet);
 	if (packet->udp)
 		return ((u8 *) packet->udp) + packet_udp_header_len(packet);
-	assert(!"no valid payload; not TCP or UDP!?");
+	if (packet->icmpv4)
+		return ((u8 *) packet->icmpv4) + packet_icmpv4_header_len(packet);
+	if (packet->icmpv6)
+		return ((u8 *) packet->icmpv6) + packet_icmpv6_header_len(packet);
+
+	assert(!"no valid payload; not TCP or UDP or ICMP!?");
 	return NULL;
 }
 

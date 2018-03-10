@@ -26,7 +26,6 @@
 #include "netdev.h"
 
 #include <arpa/inet.h>
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <net/if.h>
@@ -45,6 +44,7 @@
 #include <net/if_tun.h>
 #endif /* defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) */
 
+#include "assert.h"
 #include "ip.h"
 #include "ipv6.h"
 #include "logging.h"
@@ -54,6 +54,7 @@
 #include "packet_socket.h"
 #include "tcp.h"
 #include "tun.h"
+#include "wrap.h"
 
 /* Internal private state for the netdev for purely local tests. */
 struct local_netdev {
@@ -61,8 +62,7 @@ struct local_netdev {
 
 	char *name;		/* malloc-ed copy of interface name (owned) */
 	int tun_fd;		/* tun for sending/receiving packets */
-	int ipv4_control_fd;	/* fd for IPv4 configuration of tun interface */
-	int ipv6_control_fd;	/* fd for IPv6 configuration of tun interface */
+	int control_fd;		/* fd for configuration of tun interface */
 	int index;		/* interface index from if_nametoindex */
 	struct packet_socket *psock;	/* for sniffing packets (owned) */
 };
@@ -108,11 +108,30 @@ static void check_remote_address(struct config *config,
 	}
 }
 
+/* Make sure config->live_local_ip is not configured on any devices.
+ * This is only used for anyip tests.
+ */
+static void check_local_anyip(struct config *config)
+{
+	if (is_ip_local(&config->live_local_ip)) {
+		die("error: live_local_ip %s is not remote for anyip\n",
+		    config->live_local_ip_string);
+	}
+}
+
 /* Create a tun device for the lifetime of this test. */
 static void create_device(struct config *config, struct local_netdev *netdev)
 {
 	/* Open the tun device, which "clones" it for our purposes. */
-	int tun_fd = open(TUN_PATH, O_RDWR);
+	int tun_fd;
+#ifdef linux
+	int nb = 0;
+
+loop:
+	if (++nb > 10)
+		die_perror("open tun device");
+#endif
+	tun_fd = open(TUN_PATH, O_RDWR);
 	if (tun_fd < 0)
 		die_perror("open tun device");
 
@@ -130,6 +149,15 @@ static void create_device(struct config *config, struct local_netdev *netdev)
 	if (status < 0)
 		die_perror("TUNSETIFF");
 
+	/* Our tests rely on using tun0.
+	 * We might change this in the future, by passing a variable filled
+	 * with tunnel name. In the mean time, wait a bit that tun0 gets free.
+	 */
+	if (strcmp(ifr.ifr_name, "tun0")) {
+		close(tun_fd);
+		usleep(100000);
+		goto loop;
+	}
 	netdev->name = strdup(ifr.ifr_name);
 #endif
 
@@ -186,15 +214,8 @@ static void create_device(struct config *config, struct local_netdev *netdev)
 		free(command);
 	}
 
-	/* Open a socket we can use to configure the tun interface.
-	 * We only open up an AF_INET6 socket on-demand as needed,
-	 * so that we can run IPv4 tests on a machine without IPv6.
-	 */
-	netdev->ipv4_control_fd = -1;
-	netdev->ipv6_control_fd = -1;
-	netdev->ipv4_control_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-	if (netdev->ipv4_control_fd < 0)
-		die_perror("opening AF_INET, SOCK_DGRAM, IPPROTO_IP socket");
+	/* Open a socket we can use to configure the tun interface. */
+	netdev->control_fd = wrap_socket(config->ip_version, SOCK_DGRAM);
 }
 
 /* Set the offload flags to be like a typical ethernet device */
@@ -202,7 +223,7 @@ static void set_device_offload_flags(struct local_netdev *netdev)
 {
 #ifdef linux
 	const u32 offload =
-	    TUN_F_CSUM | TUN_F_TSO4 | TUN_F_TSO6 | TUN_F_TSO_ECN | TUN_F_UFO;
+	    TUN_F_CSUM | TUN_F_TSO4 | TUN_F_TSO6 | TUN_F_TSO_ECN;
 	if (ioctl(netdev->tun_fd, TUNSETOFFLOAD, offload) != 0)
 		die_perror("TUNSETOFFLOAD");
 #endif
@@ -214,25 +235,31 @@ static void bring_up_device(struct local_netdev *netdev)
 	struct ifreq ifr;
 	memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, netdev->name, IFNAMSIZ);
-	if (ioctl(netdev->ipv4_control_fd, SIOCGIFFLAGS, &ifr) < 0)
+	if (ioctl(netdev->control_fd, SIOCGIFFLAGS, &ifr) < 0)
 		die_perror("SIOCGIFFLAGS");
 	ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
-	if (ioctl(netdev->ipv4_control_fd, SIOCSIFFLAGS, &ifr) < 0)
+	if (ioctl(netdev->control_fd, SIOCSIFFLAGS, &ifr) < 0)
 		die_perror("SIOCSIFFLAGS");
 }
 
-/* Route traffic destined for our remote IP through this device */
+/* Route traffic destined for our remote IP through this device.
+ * In anyip environment, we don't use the gateway IP.
+ */
 static void route_traffic_to_device(struct config *config,
 				    struct local_netdev *netdev)
 {
 	char *route_command = NULL;
 #ifdef linux
 	asprintf(&route_command,
-		 "ip route del %s > /dev/null 2>&1 ; "
-		 "ip route add %s dev %s via %s > /dev/null 2>&1",
+		 "ip -%d route del %s > /dev/null 2>&1 ; "
+		 "ip -%d route add %s dev %s %s%s > /dev/null 2>&1",
+		 (config->wire_protocol == AF_INET) ? 4 : 6,
 		 config->live_remote_prefix_string,
+		 (config->wire_protocol == AF_INET) ? 4 : 6,
 		 config->live_remote_prefix_string,
 		 netdev->name,
+		 config->is_anyip ? "" : "via ",
+		 config->is_anyip ? "" :
 		 config->live_gateway_ip_string);
 #endif
 #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
@@ -279,9 +306,12 @@ struct netdev *local_netdev_new(struct config *config)
 	set_device_offload_flags(netdev);
 	bring_up_device(netdev);
 
-	net_setup_dev_address(netdev->name,
-			      &config->live_local_ip,
-			      config->live_prefix_len);
+	if (config->is_anyip)
+		check_local_anyip(config);
+	else
+		net_setup_dev_address(netdev->name,
+				      &config->live_local_ip,
+				      config->live_prefix_len);
 
 	route_traffic_to_device(config, netdev);
 	netdev->psock = packet_socket_new(netdev->name);
@@ -297,10 +327,8 @@ static void local_netdev_free(struct netdev *a_netdev)
 		packet_socket_free(netdev->psock);
 	if (netdev->tun_fd >= 0)
 		close(netdev->tun_fd);
-	if (netdev->ipv4_control_fd >= 0)
-		close(netdev->ipv4_control_fd);
-	if (netdev->ipv6_control_fd >= 0)
-		close(netdev->ipv6_control_fd);
+	if (netdev->control_fd >= 0)
+		close(netdev->control_fd);
 	if (netdev->name != NULL)
 		free(netdev->name);
 	memset(netdev, 0, sizeof(*netdev));  /* paranoia to help catch bugs */

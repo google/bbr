@@ -27,12 +27,12 @@
 
 #ifndef HAVE_OPEN_MEMSTREAM
 
+#include "assert.h"
 #include "open_memstream.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <assert.h>
 
 /* Our internal state for the memstream. */
 struct mem_stream {

@@ -29,7 +29,10 @@
 
 #include "ethernet.h"
 
+struct config;
+
 /* Get the link layer address for the device with the given name, or die. */
-void get_hw_address(const char *name, struct ether_addr *hw_address);
+void get_hw_address(const char *name, struct ether_addr *hw_address,
+			enum ip_version_t ip_version);
 
 #endif /* __LINK_LAYER_H__ */

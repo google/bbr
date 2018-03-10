@@ -22,12 +22,13 @@
  * Logging and output functions.
  */
 
-#include "logging.h"
+#include "run.h"
+#include "system.h"
 
 #include <stdarg.h>
 #include <stdlib.h>
 
-extern void die(char *format, ...)
+extern void __attribute__((noreturn)) die(char *format, ...)
 {
 	va_list ap;
 
@@ -35,12 +36,16 @@ extern void die(char *format, ...)
 	vfprintf(stderr, format, ap);
 	va_end(ap);
 
+	run_cleanup_command();
+
 	exit(EXIT_FAILURE);
 }
 
-void die_perror(char *message)
+void __attribute__((noreturn)) die_perror(char *message)
 {
 	perror(message);
+
+	run_cleanup_command();
 
 	exit(EXIT_FAILURE);
 }

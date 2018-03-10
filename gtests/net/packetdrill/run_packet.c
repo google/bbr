@@ -39,9 +39,11 @@
 #include "packet_to_string.h"
 #include "run.h"
 #include "script.h"
+#include "tcp.h"
 #include "tcp_options_iterator.h"
 #include "tcp_options_to_string.h"
 #include "tcp_packet.h"
+#include "wrap.h"
 
 /* To avoid issues with TIME_WAIT, FIN_WAIT1, and FIN_WAIT2 we use
  * dynamically-chosen, unique 4-tuples for each test. We implement the
@@ -50,29 +52,11 @@
  * the lifetime of our process to ensure that the port is not
  * reused by a later test.
  */
-static u16 ephemeral_port(void)
+static u16 ephemeral_port(enum ip_version_t ip_version)
 {
-	int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (fd < 0)
-		die_perror("socket");
+	int fd = wrap_socket(ip_version, SOCK_STREAM);
 
-	struct sockaddr_in addr;
-	socklen_t addrlen = sizeof(addr);
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = 0;		/* let the OS pick the port */
-	if (bind(fd, (struct sockaddr *)&addr, addrlen) < 0)
-		die_perror("bind");
-
-	memset(&addr, 0, sizeof(addr));
-	if (getsockname(fd, (struct sockaddr *)&addr, &addrlen) < 0)
-		die_perror("getsockname");
-	assert(addr.sin_family == AF_INET);
-
-	if (listen(fd, 1) < 0)
-		die_perror("listen");
-
-	return ntohs(addr.sin_port);
+	return wrap_bind_listen(fd, ip_version, 0);
 }
 
 /* Return the next ephemeral port to use. We want quick results for
@@ -90,7 +74,7 @@ static u16 next_ephemeral_port(struct state *state)
 		state->packets->next_ephemeral_port = -1;
 		return port;
 	} else {
-		return ephemeral_port();
+		return ephemeral_port(state->config->ip_version);
 	}
 }
 
@@ -140,7 +124,9 @@ static void verbose_packet_dump(struct state *state, const char *type,
 	}
 }
 
-/* See if the live packet matches the live 4-tuple of the socket under test. */
+/* See if the live packet matches the live 4-tuple of the socket (UDP/TCP)
+ * or matches the src/dst IP addr for the ICMP socket
+ */
 static struct socket *find_socket_for_live_packet(
 	struct state *state, const struct packet *packet,
 	enum direction_t *direction)
@@ -150,11 +136,16 @@ static struct socket *find_socket_for_live_packet(
 		return NULL;
 
 	struct tuple packet_tuple, live_outbound, live_inbound;
+	bool is_icmp = (socket->protocol == IPPROTO_ICMP && packet->icmpv4) ||
+		       (socket->protocol == IPPROTO_ICMPV6 && packet->icmpv6);
 	get_packet_tuple(packet, &packet_tuple);
 
 	/* Is packet inbound to the socket under test? */
 	socket_get_inbound(&socket->live, &live_inbound);
-	if (is_equal_tuple(&packet_tuple, &live_inbound)) {
+	if (is_equal_tuple(&packet_tuple, &live_inbound) ||
+	    (is_icmp &&
+	     is_equal_ip(&packet_tuple.dst.ip, &live_inbound.dst.ip) &&
+	     is_equal_ip(&packet_tuple.src.ip, &live_inbound.src.ip))) {
 		*direction = DIRECTION_INBOUND;
 		DEBUGP("inbound live packet, socket in state %d\n",
 		       socket->state);
@@ -162,12 +153,16 @@ static struct socket *find_socket_for_live_packet(
 	}
 	/* Is packet outbound from the socket under test? */
 	socket_get_outbound(&socket->live, &live_outbound);
-	if (is_equal_tuple(&packet_tuple, &live_outbound)) {
+	if (is_equal_tuple(&packet_tuple, &live_outbound) ||
+	    (is_icmp &&
+	     is_equal_ip(&packet_tuple.dst.ip, &live_outbound.dst.ip) &&
+	     is_equal_ip(&packet_tuple.src.ip, &live_outbound.src.ip))) {
 		*direction = DIRECTION_OUTBOUND;
 		DEBUGP("outbound live packet, socket in state %d\n",
 		       socket->state);
 		return socket;
 	}
+
 	return NULL;
 }
 
@@ -199,9 +194,12 @@ static struct socket *handle_listen_for_script_packet(
 		 */
 		match = (socket == NULL);
 	} else {
-		/* In local mode we will certainly know about this socket. */
-		match = ((socket != NULL) &&
-			 (socket->state == SOCKET_PASSIVE_LISTENING));
+		/* In local mode we typically know about the socket, but
+		 * we also allow null socket_under_test to facilitate tests
+		 * where we intentionally want no matching socket.
+		 */
+		match = (socket == NULL) ||
+			(socket->state == SOCKET_PASSIVE_LISTENING);
 	}
 	if (!match)
 		return NULL;
@@ -223,7 +221,7 @@ static struct socket *handle_listen_for_script_packet(
 	socket->script.remote		= tuple.src;
 	socket->script.local		= tuple.dst;
 	socket->script.remote_isn	= ntohl(packet->tcp->seq);
-	socket->script.fd		= -1;
+	socket->fd.script_fd		= -1;
 
 	/* Set up the live info for this socket based
 	 * on the script packet and our overall config.
@@ -233,7 +231,7 @@ static struct socket *handle_listen_for_script_packet(
 	socket->live.local.ip		= config->live_local_ip;
 	socket->live.local.port		= htons(config->live_bind_port);
 	socket->live.remote_isn		= ntohl(packet->tcp->seq);
-	socket->live.fd			= -1;
+	socket->fd.live_fd		= -1;
 
 	if (DEBUG_LOGGING) {
 		char local_string[ADDR_STR_LEN];
@@ -296,11 +294,11 @@ static struct socket *handle_connect_for_script_packet(
 		socket->address_family = packet_address_family(packet);
 		socket->protocol = packet_ip_protocol(packet);
 
-		socket->script.fd	 = -1;
+		socket->fd.script_fd	 = -1;
 
 		socket->live.remote.ip   = config->live_remote_ip;
 		socket->live.remote.port = htons(config->live_connect_port);
-		socket->live.fd		 = -1;
+		socket->fd.live_fd	 = -1;
 	}
 
 	/* Fill in the new info about this connection. */
@@ -331,16 +329,25 @@ static struct socket *find_connect_for_live_packet(
 		(packet->udp &&
 		 (socket->protocol == IPPROTO_UDP) &&
 		 (socket->state == SOCKET_ACTIVE_CONNECTING));
+	bool is_icmp_match =
+		(((packet->icmpv4 && socket->protocol == IPPROTO_ICMP) ||
+		  (packet->icmpv6 && socket->protocol == IPPROTO_ICMPV6)) &&
+		 (socket->state == SOCKET_ACTIVE_CONNECTING));
 	bool is_tcp_match =
 		(packet->tcp && packet->tcp->syn && !packet->tcp->ack &&
 		 (socket->protocol == IPPROTO_TCP) &&
 		 (socket->state == SOCKET_ACTIVE_SYN_SENT));
-	if (!is_udp_match && !is_tcp_match)
+	if (!is_udp_match && !is_tcp_match && !is_icmp_match)
 		return NULL;
 
-	if (!is_equal_ip(&tuple.dst.ip, &socket->live.remote.ip) ||
-	    !is_equal_port(tuple.dst.port, socket->live.remote.port))
-		return NULL;
+	if (is_icmp_match) {
+		if (!is_equal_ip(&tuple.dst.ip, &socket->live.remote.ip))
+			return NULL;
+	} else {
+		if (!is_equal_ip(&tuple.dst.ip, &socket->live.remote.ip) ||
+		    !is_equal_port(tuple.dst.port, socket->live.remote.port))
+			return NULL;
+	}
 
 	*direction = DIRECTION_OUTBOUND;
 	/* Using the details in this outgoing packet, fill in the
@@ -397,8 +404,10 @@ static int find_tcp_timestamp(struct packet *packet, char **error)
 	for (option = tcp_options_begin(packet, &iter); option != NULL;
 	     option = tcp_options_next(&iter, error))
 		if (option->kind == TCPOPT_TIMESTAMP) {
-			packet->tcp_ts_val = &(option->data.time_stamp.val);
-			packet->tcp_ts_ecr = &(option->data.time_stamp.ecr);
+			packet->tcp_ts_val =
+				(void *)&(option->data.time_stamp.val);
+			packet->tcp_ts_ecr =
+				(void *)&(option->data.time_stamp.ecr);
 		}
 	return *error ? STATUS_ERR : STATUS_OK;
 }
@@ -459,13 +468,17 @@ static int map_inbound_icmp_udp_packet(
 static int map_inbound_icmp_packet(
 	struct socket *socket, struct packet *live_packet, char **error)
 {
-	if (packet_echoed_ip_protocol(live_packet) == IPPROTO_TCP)
-		return map_inbound_icmp_tcp_packet(socket, live_packet, error);
-	else if (packet_echoed_ip_protocol(live_packet) == IPPROTO_UDP)
-		return map_inbound_icmp_udp_packet(socket, live_packet, error);
-	else
-		assert(!"unsupported layer 4 protocol echoed in ICMP packet");
-	return STATUS_ERR;
+	if (live_packet->echoed_header) {
+		if (packet_echoed_ip_protocol(live_packet) == IPPROTO_TCP)
+			return map_inbound_icmp_tcp_packet(socket, live_packet, error);
+		else if (packet_echoed_ip_protocol(live_packet) == IPPROTO_UDP)
+			return map_inbound_icmp_udp_packet(socket, live_packet, error);
+		else
+			assert(!"unsupported layer 4 protocol echoed in ICMP packet");
+		return STATUS_ERR;
+	} else {
+		return STATUS_OK;
+	}
 }
 
 /* Rewrite the IP and TCP, UDP, or ICMP fields in 'live_packet', mapping
@@ -483,8 +496,30 @@ static int map_inbound_packet(
 
 	/* Remap packet to live values. */
 	struct tuple live_inbound;
+	u16 src_port = 0;
+	u16 dst_port = 0;
+
+	if (live_packet->tcp) {
+		src_port = live_packet->tcp->src_port;
+		dst_port = live_packet->tcp->dst_port;
+	} else if (live_packet->udp) {
+		src_port = live_packet->udp->src_port;
+		dst_port = live_packet->udp->dst_port;
+	}
 	socket_get_inbound(&socket->live, &live_inbound);
 	set_packet_tuple(live_packet, &live_inbound);
+	/* restore preset src and dst port */
+	if (live_packet->tcp) {
+		if (src_port)
+			live_packet->tcp->src_port = src_port;
+		if (dst_port)
+			live_packet->tcp->dst_port = dst_port;
+	} else if (live_packet->udp) {
+		if (src_port)
+			live_packet->udp->src_port = src_port;
+		if (dst_port)
+			live_packet->udp->dst_port = dst_port;
+	}
 
 	live_packet->mss = state->config->mss;
 
@@ -524,13 +559,29 @@ static int map_inbound_packet(
 
 		if (get_outbound_ts_val_mapping(socket,
 						packet_tcp_ts_ecr(live_packet),
-						&live_ts_ecr)) {
+						&live_ts_ecr) == STATUS_OK) {
+			/* TS ecr refers to an exact outbound TS val. */
+			packet_set_tcp_ts_ecr(live_packet, live_ts_ecr);
+		} else if (state->config->tcp_ts_ecr_scaled &&
+			   socket->found_first_tcp_ts) {
+			/* Interpolate to approximate TS ecr. By
+			 * default we verify that inbound TCP
+			 * timestamp ECR values reflect earlier
+			 * outbound TCP timestamp VAL values, since
+			 * this is what well-behaved stacks will do.
+			 */
+			live_ts_ecr = (packet_tcp_ts_ecr(live_packet) -
+				       socket->first_script_ts_val +
+				       socket->first_actual_ts_val);
+			packet_set_tcp_ts_ecr(live_packet, live_ts_ecr);
+		} else {
 			asprintf(error,
-				 "unable to find mapping for timestamp ecr %u",
+				 "unable to infer live TS ecr for "
+				 "script TS ecr %u;  "
+				 "no matching or preceding outound TS val",
 				 packet_tcp_ts_ecr(live_packet));
 			return STATUS_ERR;
 		}
-		packet_set_tcp_ts_ecr(live_packet, live_ts_ecr);
 	}
 
 	return STATUS_OK;
@@ -556,7 +607,12 @@ static int map_outbound_live_packet(
 	/* Verify packet addresses are outbound and live for this socket. */
 	get_packet_tuple(live_packet, &live_packet_tuple);
 	socket_get_outbound(&socket->live, &live_outbound);
-	assert(is_equal_tuple(&live_packet_tuple, &live_outbound));
+	if (socket->protocol == IPPROTO_ICMP ||
+	    socket->protocol == IPPROTO_ICMPV6)
+		assert(is_equal_ip(&live_packet_tuple.src.ip, &live_outbound.src.ip) &&
+		       is_equal_ip(&live_packet_tuple.dst.ip, &live_outbound.dst.ip));
+	else
+		assert(is_equal_tuple(&live_packet_tuple, &live_outbound));
 
 	/* Rewrite 4-tuple to be outbound script values. */
 	socket_get_outbound(&socket->script, &script_outbound);
@@ -589,6 +645,8 @@ static int map_outbound_live_packet(
 	    (actual_packet->tcp_ts_val != NULL)) {
 		u32 script_ts_val = packet_tcp_ts_val(script_packet);
 		u32 actual_ts_val = packet_tcp_ts_val(actual_packet);
+		u32 script_ts_ecr = packet_tcp_ts_ecr(script_packet);
+		u32 actual_ts_ecr = packet_tcp_ts_ecr(actual_packet);
 
 		/* Remember script->actual TS val mapping for later. */
 		set_outbound_ts_val_mapping(socket,
@@ -600,6 +658,8 @@ static int map_outbound_live_packet(
 			socket->found_first_tcp_ts = true;
 			socket->first_script_ts_val = script_ts_val;
 			socket->first_actual_ts_val = actual_ts_val;
+			socket->first_script_ts_ecr = script_ts_ecr;
+			socket->first_actual_ts_ecr = actual_ts_ecr;
 		}
 
 		/* Rewrite TCP timestamp value to script space, so we
@@ -652,27 +712,50 @@ static int check_field(
 	return STATUS_OK;
 }
 
-/* Verify that the actual ECN bits are as the script expected. */
-static int verify_outbound_live_ecn(enum ip_ecn_t ecn,
-				    u8 actual_ecn_bits,
-				    u8 script_ecn_bits,
+/* Verify that the actual TOS byte is as the script expected. */
+static int verify_outbound_live_tos(enum tos_chk_t tos_chk,
+				    u8 actual_tos_byte,
+				    u8 script_tos_byte,
 				    char **error)
 {
-	if (ecn == ECN_NOCHECK)
-		return STATUS_OK;
-
-	if (ecn == ECN_ECT01) {
-		if ((actual_ecn_bits != IP_ECN_ECT0) &&
-		    (actual_ecn_bits != IP_ECN_ECT1)) {
-			asprintf(error, "live packet field ip_ecn: "
-				 "expected: 0x1 or 0x2 vs actual: 0x%x",
-				 actual_ecn_bits);
+	if (tos_chk == TOS_CHECK_ECN) {
+		u8 actual_ecn_bits = actual_tos_byte & IP_ECN_MASK;
+		if (script_tos_byte == ECN_ECT01) {
+			if ((actual_ecn_bits != IP_ECN_ECT0) &&
+			    (actual_ecn_bits != IP_ECN_ECT1)) {
+				asprintf(error, "live packet field ip_ecn: "
+					 "expected: 0x1 or 0x2 vs actual: 0x%x",
+					 actual_ecn_bits);
+				return STATUS_ERR;
+			}
+		} else if (check_field("ip_ecn",
+				       script_tos_byte,
+				       actual_ecn_bits,
+				       error)) {
 			return STATUS_ERR;
 		}
-	} else if (check_field("ip_ecn",
-			       script_ecn_bits,
-			       actual_ecn_bits, error)) {
-		return STATUS_ERR;
+	} else if (tos_chk == TOS_CHECK_TOS) {
+		if (check_field("tos",
+				script_tos_byte,
+				actual_tos_byte, error)) {
+			return STATUS_ERR;
+		}
+	}
+
+	return STATUS_OK;
+}
+
+
+static int verify_outbound_live_ttl_or_hl(u8 actual_ttl_byte,
+					  u8 script_ttl_byte,
+					  char **error)
+{
+	if (script_ttl_byte != TTL_CHECK_NONE) {
+		if (check_field("ttl",
+				script_ttl_byte,
+				actual_ttl_byte, error)) {
+			return STATUS_ERR;
+		}
 	}
 
 	return STATUS_OK;
@@ -715,10 +798,15 @@ static int verify_ipv4(
 			ntohs(actual_ipv4->tot_len), error))
 		return STATUS_ERR;
 
-	if (verify_outbound_live_ecn(script_packet->ecn,
-				     ipv4_ecn_bits(actual_ipv4),
-				     ipv4_ecn_bits(script_ipv4),
+	if (verify_outbound_live_tos(script_packet->tos_chk,
+				     ipv4_tos_byte(actual_ipv4),
+				     ipv4_tos_byte(script_ipv4),
 				     error))
+		return STATUS_ERR;
+
+	if (verify_outbound_live_ttl_or_hl(ipv4_ttl_byte(actual_ipv4),
+					   ipv4_ttl_byte(script_ipv4),
+					   error))
 		return STATUS_ERR;
 
 	return STATUS_OK;
@@ -746,10 +834,15 @@ static int verify_ipv6(
 			actual_ipv6->next_header, error))
 		return STATUS_ERR;
 
-	if (verify_outbound_live_ecn(script_packet->ecn,
-				     ipv6_ecn_bits(actual_ipv6),
-				     ipv6_ecn_bits(script_ipv6),
+	if (verify_outbound_live_tos(script_packet->tos_chk,
+				     ipv6_tos_byte(actual_ipv6),
+				     ipv6_tos_byte(script_ipv6),
 				     error))
+		return STATUS_ERR;
+
+	if (verify_outbound_live_ttl_or_hl(ipv6_hoplimit_byte(actual_ipv6),
+					   ipv6_hoplimit_byte(script_ipv6),
+					   error))
 		return STATUS_ERR;
 
 	return STATUS_OK;
@@ -824,8 +917,8 @@ static int verify_udp(
 	const struct udp *script_udp = script_packet->headers[layer].h.udp;
 
 	if (check_field("udp_len",
-			script_udp->len,
-			actual_udp->len, error))
+			ntohs(script_udp->len),
+			ntohs(actual_udp->len), error))
 		return STATUS_ERR;
 	return STATUS_OK;
 }
@@ -838,12 +931,46 @@ static int verify_gre(
 {
 	const struct gre *actual_gre = actual_packet->headers[layer].h.gre;
 	const struct gre *script_gre = script_packet->headers[layer].h.gre;
+	int i = 0;
 
-	/* TODO(ncardwell) check all fields of GRE header */
 	if (check_field("gre_len",
 			gre_len(script_gre),
 			gre_len(actual_gre), error))
 		return STATUS_ERR;
+	if (script_gre->flags != actual_gre->flags) {
+		asprintf(error, "mismatch in GRE flags");
+		return STATUS_ERR;
+	}
+	if (script_gre->proto != actual_gre->proto) {
+		asprintf(error, "mismatch in GRE proto");
+		return STATUS_ERR;
+	}
+
+	if (script_gre->has_checksum || script_gre->has_routing) {
+		if (script_gre->be16[0] != actual_gre->be16[0]) {
+			asprintf(error, "mismatch in GRE sum");
+			return STATUS_ERR;
+		}
+		if (script_gre->be16[1] != actual_gre->be16[1]) {
+			asprintf(error, "mismatch in GRE off");
+			return STATUS_ERR;
+		}
+		i++;
+	}
+	if (script_gre->has_key) {
+		if (script_gre->be32[i] != actual_gre->be32[i]) {
+			asprintf(error, "mismatch in GRE key");
+			return STATUS_ERR;
+		}
+		i++;
+	}
+	if (script_gre->has_seq) {
+		if (script_gre->be32[i] != actual_gre->be32[i]) {
+			asprintf(error, "mismatch in GRE seq");
+			return STATUS_ERR;
+		}
+		i++;
+	}
 	return STATUS_OK;
 }
 
@@ -877,6 +1004,46 @@ static int verify_mpls(
 	return STATUS_OK;
 }
 
+/* Verify type and code field in ICMPv4 header */
+static int verify_icmpv4(
+	const struct packet *actual_packet,
+	const struct packet *script_packet,
+	int layer, char **error)
+{
+	const struct icmpv4 *actual_icmpv4 = actual_packet->headers[layer].h.icmpv4;
+	const struct icmpv4 *script_icmpv4 = script_packet->headers[layer].h.icmpv4;
+
+	if (check_field("icmp_type",
+			script_icmpv4->type,
+			actual_icmpv4->type, error))
+		return STATUS_ERR;
+	if (check_field("icmp_code",
+			script_icmpv4->code,
+			actual_icmpv4->code, error))
+		return STATUS_ERR;
+	return STATUS_OK;
+}
+
+/* Verify type and code field in ICMPv6 header */
+static int verify_icmpv6(
+	const struct packet *actual_packet,
+	const struct packet *script_packet,
+	int layer, char **error)
+{
+	const struct icmpv6 *actual_icmpv6 = actual_packet->headers[layer].h.icmpv6;
+	const struct icmpv6 *script_icmpv6 = script_packet->headers[layer].h.icmpv6;
+
+	if (check_field("icmp_type",
+			script_icmpv6->type,
+			actual_icmpv6->type, error))
+		return STATUS_ERR;
+	if (check_field("icmp_code",
+			script_icmpv6->code,
+			actual_icmpv6->code, error))
+		return STATUS_ERR;
+	return STATUS_OK;
+}
+
 typedef int (*verifier_func)(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
@@ -895,6 +1062,8 @@ static int verify_header(
 		[HEADER_MPLS]	= verify_mpls,
 		[HEADER_TCP]	= verify_tcp,
 		[HEADER_UDP]	= verify_udp,
+		[HEADER_ICMPV4] = verify_icmpv4,
+		[HEADER_ICMPV6] = verify_icmpv6,
 	};
 	verifier_func verifier = NULL;
 	const struct header *actual_header = &actual_packet->headers[layer];
@@ -927,7 +1096,8 @@ static int verify_outbound_live_headers(
 	int i;
 
 	assert((actual_packet->ipv4 != NULL) || (actual_packet->ipv6 != NULL));
-	assert((actual_packet->tcp != NULL) || (actual_packet->udp != NULL));
+	assert((actual_packet->tcp != NULL) || (actual_packet->udp != NULL) ||
+	       (actual_packet->icmpv4 != NULL) || (actual_packet->icmpv6 != NULL));
 
 	if (actual_headers != script_headers) {
 		asprintf(error, "live packet header layers: "
@@ -948,15 +1118,114 @@ static int verify_outbound_live_headers(
 	return STATUS_OK;
 }
 
-/* Return true iff the TCP options for the packets are bytewise identical. */
-static bool same_tcp_options(struct packet *packet_a,
-			     struct packet *packet_b)
+/* Verify the flow label in IPv6 header is as expected
+ * Note: the initial value for a flow comes from the first packet
+ */
+static int verify_outbound_live_ipv6_flowlabel(
+	struct socket *socket,
+	struct packet *actual_packet,
+	struct packet *script_packet, char **error)
 {
-	return ((packet_tcp_options_len(packet_a) ==
-		 packet_tcp_options_len(packet_b)) &&
-		(memcmp(packet_tcp_options(packet_a),
-			packet_tcp_options(packet_b),
-			packet_tcp_options_len(packet_a)) == 0));
+	u32 script_flowlabel = ipv6_flow_label(script_packet->ipv6);
+	u32 live_flowlabel = ipv6_flow_label(actual_packet->ipv6);
+
+	/* Return directly if script_flowlabel is not set */
+	if (!script_flowlabel)
+		return STATUS_OK;
+	/* Check flowlabel is marked in live packet */
+	if (!live_flowlabel) {
+		asprintf(error,
+			 "flowlabel unmarked in the live packet");
+		return STATUS_ERR;
+	}
+	/* Initialize flowlabel_map in socket */
+	if (!socket->flowlabel_map.flowlabel_script) {
+		socket->flowlabel_map.flowlabel_script = script_flowlabel;
+		socket->flowlabel_map.flowlabel_live = live_flowlabel;
+		return STATUS_OK;
+	}
+	/* Expecting different flowlabel */
+	if (script_flowlabel != socket->flowlabel_map.flowlabel_script) {
+		if (live_flowlabel != socket->flowlabel_map.flowlabel_live) {
+			socket->flowlabel_map.flowlabel_script = script_flowlabel;
+			socket->flowlabel_map.flowlabel_live = live_flowlabel;
+			return STATUS_OK;
+		} else {
+			asprintf(error,
+				 "expected a different flowlabel but got "
+				 "the same");
+			return STATUS_ERR;
+		}
+	/* Expecting consistent flowlabel */
+	} else {
+		if (live_flowlabel == socket->flowlabel_map.flowlabel_live) {
+			return STATUS_OK;
+		} else {
+			asprintf(error,
+				 "inconsistent flowlabels for this packet: "
+				 "expected: 0x%x vs actual: 0x%x",
+				 socket->flowlabel_map.flowlabel_live,
+				 live_flowlabel);
+			return STATUS_ERR;
+		}
+	}
+	/* Should not reach here, only for compiling */
+	return STATUS_OK;
+}
+
+static int verify_outbound_tcp_option(
+	struct config *config,
+	struct packet *actual_packet,
+	struct packet *script_packet,
+	struct tcp_option *actual_option,
+	struct tcp_option *script_option,
+	char **error)
+{
+	u32 script_ts_val, actual_ts_val;
+	int ts_val_tick_usecs;
+	long tolerance_usecs;
+
+	tolerance_usecs = config->tolerance_usecs;
+
+	switch (actual_option->kind) {
+	case TCPOPT_EOL:
+	case TCPOPT_NOP:
+		break;
+	case TCPOPT_TIMESTAMP:
+		script_ts_val = packet_tcp_ts_val(script_packet);
+		actual_ts_val = packet_tcp_ts_val(actual_packet);
+
+		ts_val_tick_usecs = config->tcp_ts_tick_usecs;
+
+		/* See if the deviation from the script TS val is
+		 * within our configured tolerance.
+		 */
+		if (ts_val_tick_usecs &&
+		    ((abs((s32)(actual_ts_val - script_ts_val)) *
+		      ts_val_tick_usecs) >
+		     tolerance_usecs)) {
+			asprintf(error, "bad outbound TCP timestamp value, tolerance %ld", tolerance_usecs);
+			return STATUS_ERR;
+		}
+		break;
+
+	default:
+		if (script_option->length != actual_option->length) {
+			asprintf(error,
+				 "bad lengths for outbound TCP option %d",
+				 script_option->kind);
+			return STATUS_ERR;
+		}
+		if (script_option->length > 2 &&
+		    memcmp(&actual_option->data, &script_option->data,
+			   actual_option->length - 2) != 0) {
+			asprintf(error, "bad value outbound TCP option %d",
+				 script_option->kind);
+			return STATUS_ERR;
+		}
+	}
+
+	return STATUS_OK;
 }
 
 /* Verify that the TCP option values matched expected values. */
@@ -965,47 +1234,36 @@ static int verify_outbound_live_tcp_options(
 	struct packet *actual_packet,
 	struct packet *script_packet, char **error)
 {
+	struct tcp_options_iterator a_iter, s_iter;
+
+	struct tcp_option *a_opt, *s_opt;
+
 	/* See if we should validate TCP options at all. */
 	if (script_packet->flags & FLAG_OPTIONS_NOCHECK)
 		return STATUS_OK;
 
-	/* Simplest case: see if full options are bytewise identical. */
-	if (same_tcp_options(actual_packet, script_packet))
-		return STATUS_OK;
+	a_opt = tcp_options_begin(actual_packet, &a_iter),
+	s_opt = tcp_options_begin(script_packet, &s_iter);
 
-	/* Otherwise, see if we just have a slight difference in TS val. */
-	if (script_packet->tcp_ts_val != NULL &&
-	    actual_packet->tcp_ts_val != NULL) {
-		u32 script_ts_val = packet_tcp_ts_val(script_packet);
-		u32 actual_ts_val = packet_tcp_ts_val(actual_packet);
-
-		/* See if the deviation from the script TS val is
-		 * within our configured tolerance.
-		 */
-		if (config->tcp_ts_tick_usecs &&
-		    ((abs((s32)(actual_ts_val - script_ts_val)) *
-		      config->tcp_ts_tick_usecs) >
-		     config->tolerance_usecs)) {
-			asprintf(error, "bad outbound TCP timestamp value");
+	/* TCP options are expected to be a deterministic order. */
+	while (a_opt != NULL || s_opt != NULL) {
+		if (a_opt == NULL || s_opt == NULL ||
+		    a_opt->kind != s_opt->kind) {
+			asprintf(error, "bad outbound TCP options");
 			return STATUS_ERR;
 		}
 
-		/* Now see if the rest of the TCP options outside the
-		 * TS val match: temporarily re-write the actual TS
-		 * val to the script TS val and then see if the full
-		 * options are now bytewise identical.
-		 */
-		packet_set_tcp_ts_val(actual_packet, script_ts_val);
-		bool is_same = same_tcp_options(actual_packet, script_packet);
-		packet_set_tcp_ts_val(actual_packet, actual_ts_val);
-		if (is_same)
-			return STATUS_OK;
+		if (verify_outbound_tcp_option(config, actual_packet,
+					script_packet, a_opt, s_opt,
+					error) != STATUS_OK) {
+			return STATUS_ERR;
+		}
+
+		a_opt = tcp_options_next(&a_iter, error);
+		s_opt = tcp_options_next(&s_iter, error);
 	}
-
-	asprintf(error, "bad outbound TCP options");
-	return STATUS_ERR;	/* The TCP options did not match */
+	return STATUS_OK;
 }
-
 
 /* Verify TCP/UDP payload matches expected value. */
 static int verify_outbound_live_payload(
@@ -1067,6 +1325,13 @@ static int verify_outbound_live_packet(
 		goto out;
 	}
 
+	if (script_packet->ipv6) {
+		if (verify_outbound_live_ipv6_flowlabel(socket, actual_packet,
+							script_packet, error)) {
+			non_fatal = true;
+			goto out;
+		}
+	}
 	if (script_packet->tcp) {
 		/* Verify TCP options matched expected values. */
 		if (verify_outbound_live_tcp_options(
@@ -1077,10 +1342,15 @@ static int verify_outbound_live_packet(
 		}
 	}
 
-	/* Verify TCP/UDP payload matches expected value. */
-	if (verify_outbound_live_payload(actual_packet, script_packet, error)) {
-		non_fatal = true;
-		goto out;
+	/* Verify TCP/UDP payload matches expected value.
+	 * We skip the payload check for ICMP packets as the payload generated
+	 * by packetdrill is incomplete.
+	 */
+	if (!actual_packet->icmpv4 && !actual_packet->icmpv6) {
+		if (verify_outbound_live_payload(actual_packet, script_packet, error)) {
+			non_fatal = true;
+			goto out;
+		}
 	}
 
 	/* Verify that kernel sent packet at the time the script expected. */
@@ -1157,6 +1427,10 @@ static bool is_script_packet_match_for_socket(
 		return packet->tcp || is_packet_icmp;
 	else if (socket->protocol == IPPROTO_UDP)
 		return packet->udp || is_packet_icmp;
+	else if (socket->protocol == IPPROTO_ICMP)
+		return (packet->icmpv4 != NULL);
+	else if (socket->protocol == IPPROTO_ICMPV6)
+		return (packet->icmpv6 != NULL);
 	else
 		assert(!"unsupported layer 4 protocol in socket");
 	return false;
@@ -1195,6 +1469,18 @@ static int find_or_create_socket_for_script_packet(
 		*socket = state->socket_under_test;
 		return STATUS_OK;
 	}
+	/* For tcp packet with foreign port, use state->socket_under_test */
+	if (packet->tcp &&
+	    (packet->tcp->src_port || packet->tcp->dst_port)) {
+		*socket = state->socket_under_test;
+		return STATUS_OK;
+	}
+	/* For udp packet with foreign port, use state->socket_under_test */
+	if (packet->udp &&
+	    (packet->udp->src_port || packet->udp->dst_port)) {
+		*socket = state->socket_under_test;
+		return STATUS_OK;
+	}
 
 	asprintf(error, "no matching socket for script packet");
 	return STATUS_ERR;
@@ -1212,11 +1498,6 @@ static int do_outbound_script_packet(
 	DEBUGP("do_outbound_script_packet\n");
 	int result = STATUS_ERR;		/* return value */
 	struct packet *live_packet = NULL;
-
-	if ((packet->icmpv4 != NULL) || (packet->icmpv6 != NULL)) {
-		asprintf(error, "outbound ICMP packets are not supported");
-		goto out;
-	}
 
 	if ((socket->state == SOCKET_PASSIVE_PACKET_RECEIVED) &&
 	    packet->tcp && packet->tcp->syn && packet->tcp->ack) {
@@ -1292,6 +1573,21 @@ static int do_inbound_script_packet(
 		socket->live.remote_isn		= ntohl(packet->tcp->seq);
 	}
 
+	/* For anyip UDP/ICMP rx test, no tx packet will be sent before rx.
+	 * So the 4-tuple addr in socket->live are all 0.
+	 * We need to fill in 4-tuple first before sending pkt out.
+	 */
+	if (state->config->is_anyip && (packet->udp ||
+					packet->icmpv4 ||
+					packet->icmpv6)) {
+		socket->live.remote.ip = state->config->live_remote_ip;
+		socket->live.local.ip  = state->config->live_local_ip;
+		if (!(socket->live.remote.port))
+			socket->live.remote.port = htons(state->config->live_connect_port);
+		if (!(socket->live.local.port))
+			socket->live.local.port = htons(state->config->live_bind_port);
+	}
+
 	/* Start with a bit-for-bit copy of the packet from the script. */
 	struct packet *live_packet = packet_copy(packet);
 	/* Map packet fields from script values to live values. */
@@ -1300,7 +1596,7 @@ static int do_inbound_script_packet(
 
 	verbose_packet_dump(state, "inbound injected", live_packet,
 			    live_time_to_script_time_usecs(
-				    state, now_usecs()));
+				    state, now_usecs(state)));
 
 	if (live_packet->tcp) {
 		/* Save the TCP header so we can reset the connection later. */
@@ -1377,6 +1673,7 @@ int reset_connection(struct state *state, struct socket *socket)
 	u16 window = 0;
 	struct packet *packet = NULL;
 	struct tuple live_inbound;
+	const struct ip_info ip_info = {{TOS_CHECK_NONE, 0}, 0};
 	int result = 0;
 
 	/* Pick TCP header fields to be something the kernel will accept. */
@@ -1410,8 +1707,9 @@ int reset_connection(struct state *state, struct socket *socket)
 	}
 
 	packet = new_tcp_packet(socket->address_family,
-				DIRECTION_INBOUND, ECN_NONE,
-				"R.", seq, 0, ack_seq, window, NULL, &error);
+				DIRECTION_INBOUND, ip_info, 0, 0,
+				"R.", seq, 0, ack_seq, window, 0, NULL,
+				&error);
 	if (packet == NULL)
 		die("%s", error);
 
@@ -1427,11 +1725,13 @@ int reset_connection(struct state *state, struct socket *socket)
 	return result;
 }
 
-struct packets *packets_new(void)
+struct packets *packets_new(const struct state *state)
 {
 	struct packets *packets = calloc(1, sizeof(struct packets));
 
-	packets->next_ephemeral_port = ephemeral_port();  /* cache a port */
+	/* cache a port */
+	packets->next_ephemeral_port =
+		ephemeral_port(state->config->ip_version);
 
 	return packets;
 }

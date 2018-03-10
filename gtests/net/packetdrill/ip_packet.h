@@ -33,13 +33,15 @@
 extern void set_ip_header(void *ip_header,
 			  int address_family,
 			  u16 ip_bytes,
-			  enum ip_ecn_t ecn, u8 protocol);
+			  u8 tos, u32 flowlabel,
+			  u8 ttl, u8 protocol);
 
 /* Set the packet's IP header pointer and then populate the IP header fields. */
 extern void set_packet_ip_header(struct packet *packet,
 				 int address_family,
 				 u16 ip_bytes,
-				 enum ip_ecn_t ecn, u8 protocol);
+				 u8 tos, u32 flowlabel,
+				 u8 ttl, u8 protocol);
 
 /* Append an IPv4 header to the end of the given packet and fill in
  * src/dst.  On success, return STATUS_OK; on error return STATUS_ERR
@@ -48,6 +50,8 @@ extern void set_packet_ip_header(struct packet *packet,
 extern int ipv4_header_append(struct packet *packet,
 			      const char *ip_src,
 			      const char *ip_dst,
+			      const u8 tos,
+			      const u8 ttl,
 			      char **error);
 
 /* Append an IPv6 header to the end of the given packet and fill in
@@ -57,6 +61,8 @@ extern int ipv4_header_append(struct packet *packet,
 extern int ipv6_header_append(struct packet *packet,
 			      const char *ip_src,
 			      const char *ip_dst,
+			      const u8 tos,
+			      const u8 hop_limit,
 			      char **error);
 
 /* Finalize the IPv4 header by filling in all necessary fields that

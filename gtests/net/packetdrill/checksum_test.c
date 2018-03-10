@@ -25,7 +25,7 @@
 #include "checksum.h"
 
 #include <arpa/inet.h>
-#include <assert.h>
+#include "assert.h"
 #include "ip.h"
 #include "ipv6.h"
 #include "sctp.h"

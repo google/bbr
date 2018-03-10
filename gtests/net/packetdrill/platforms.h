@@ -31,10 +31,36 @@
 #ifdef linux
 
 #include <features.h>
+#include <linux/types.h>
+
 #define HAVE_OPEN_MEMSTREAM     1
 #define HAVE_FMEMOPEN           1
 #define TUN_PATH                "/dev/net/tun"
 #define HAVE_TCP_INFO           1
+#define HAVE_TCP_CC_INFO	1
+#define HAVE_SO_MEMINFO		1
+
+#include "uapi_linux.h"
+
+#else
+
+/* The underscore variants of the kernel-style names are defined in
+ * linux/types.h, but we must define them explicitly for other platforms. */
+typedef u8 __u8;
+typedef u16 __u16;
+typedef u32 __u32;
+typedef u64 __u64;
+
+/* We also use kernel-style names for endian-specific unsigned types. */
+typedef u16 __le16;
+typedef u16 __be16;
+typedef u32 __le32;
+typedef u32 __be32;
+typedef u64 __le64;
+typedef u64 __be64;
+
+typedef u16 __sum16;
+typedef u32 __wsum;
 
 #endif  /* linux */
 
@@ -43,7 +69,6 @@
 
 #if defined(__FreeBSD__)
 
-#include <sys/param.h>
 #define USE_LIBPCAP             1
 #define TUN_PATH                "/dev/tun0"
 #define TUN_DEV                 "tun0"

@@ -121,6 +121,7 @@ extern char *yytext;
 extern int yylex(void);
 extern int yyparse(void);
 extern int yywrap(void);
+extern const char *cleanup_cmd;
 
 /* This mutex guards all parser global variables declared in this file. */
 pthread_mutex_t parser_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -139,7 +140,7 @@ static int current_script_line = -1;
  * We uses this object to look up configuration info needed during
  * parsing (such as whether packets are IPv4 or IPv6).
  */
-static const struct config *in_config = NULL;
+struct config *in_config = NULL;
 
 /* The output of the parser: an output script containing
  * 1) a linked list of options
@@ -219,9 +220,9 @@ void read_script(const char *script_path, struct script *script)
  * text script file with the given path name and fills in the script
  * object with the parsed representation.
  */
-int parse_script(const struct config *config,
-			 struct script *script,
-			 struct invocation *callback_invocation)
+int parse_script(struct config *config,
+		 struct script *script,
+		 struct invocation *callback_invocation)
 {
 	/* This bison-generated parser is not multi-thread safe, so we
 	 * have a lock to prevent more than one thread using the
@@ -390,7 +391,7 @@ static int parse_hex_string(const char *hex, u8 *buf, int buf_len,
 }
 
 static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
-						    char **error)
+						   char **error, bool exp)
 {
 	int cookie_string_len = strlen(cookie_string);
 	if (cookie_string_len & 1) {
@@ -399,39 +400,90 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 		return NULL;
 	}
 	int cookie_bytes = cookie_string_len / 2;  /* 2 hex chars per byte */
-	if (cookie_bytes > MAX_TCP_FAST_OPEN_COOKIE_BYTES) {
+	int max_bytes = exp ? MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES :
+			      MAX_TCP_FAST_OPEN_COOKIE_BYTES;
+	if (cookie_bytes > max_bytes) {
 		asprintf(error, "TCP fast open cookie too long");
 		asprintf(error, "TCP fast open cookie of %d bytes "
 			 "exceeds maximum cookie length of %d bytes",
-			 cookie_bytes, MAX_TCP_FAST_OPEN_COOKIE_BYTES);
+			 cookie_bytes, max_bytes);
 		return NULL;
 	}
-	u8 option_bytes = TCPOLEN_EXP_FASTOPEN_BASE + cookie_bytes;
+	u8 option_bytes = cookie_bytes + (exp ? TCPOLEN_EXP_FASTOPEN_BASE :
+	                                        TCPOLEN_FASTOPEN_BASE);
 	struct tcp_option *option;
-	option = tcp_option_new(TCPOPT_EXP, option_bytes);
-	option->data.fast_open.magic = htons(TCPOPT_FASTOPEN_MAGIC);
+	option = tcp_option_new(exp ? TCPOPT_EXP : TCPOPT_FASTOPEN,
+				option_bytes);
+	if (exp)
+		option->data.fast_open_exp.magic = htons(TCPOPT_FASTOPEN_MAGIC);
+
 	int parsed_bytes = 0;
 	/* Parse cookie. This should be an ASCII hex string
 	 * representing an even number of bytes (4-16 bytes). But we
 	 * do not enforce this, since we want to allow test cases that
 	 * supply invalid cookies.
 	 */
-	if (parse_hex_string(cookie_string, option->data.fast_open.cookie,
-			     sizeof(option->data.fast_open.cookie),
+	if (parse_hex_string(cookie_string,
+			     exp ? option->data.fast_open_exp.cookie :
+				   option->data.fast_open.cookie,
+			     exp ? sizeof(option->data.fast_open_exp.cookie):
+			           sizeof(option->data.fast_open.cookie),
 			     &parsed_bytes)) {
 		free(option);
 		asprintf(error,
-			 "TCP fast open cookie is not a valid hex string");
+			 "TCP fast open cookie '%s' is not a valid hex string",
+			cookie_string);
 		return NULL;
 	}
 	assert(parsed_bytes == cookie_bytes);
 	return option;
 }
 
+static struct tcp_option *new_md5_option(const char *digest_string,
+					 char **error)
+{
+	struct tcp_option *option;
+	int digest_string_len = strlen(digest_string);
+	int digest_bytes = digest_string_len / 2;
+	int parsed_bytes = 0;
+
+	if (digest_bytes > TCP_MD5_DIGEST_LEN) {
+		asprintf(error, "TCP MD5 digest longer than 16 bytes");
+		return NULL;
+	}
+
+	option = tcp_option_new(TCPOPT_MD5SIG, TCPOLEN_MD5_BASE + digest_bytes);
+
+	/* Parse MD5 digest. This should be an ASCII hex string representing 16
+	 * bytes. But we allow smaller buffers, since we want to allow test
+	 * cases that supply invalid cookies.
+	 */
+	if (parse_hex_string(digest_string,
+			     option->data.md5.digest,
+			     sizeof(option->data.md5.digest),
+			     &parsed_bytes)) {
+		free(option);
+		asprintf(error, "TCP MD5 digest is not a valid hex string");
+		return NULL;
+	}
+	assert(parsed_bytes <= digest_bytes);
+	return option;
+}
+
+static struct packet *append_gre(struct packet *packet, struct expression *expr)
+{
+	struct gre *gre = &expr->value.gre;
+	char *error = NULL;
+	if (gre_header_append(packet, gre, &error))
+		semantic_error(error);
+	free(expr);
+	return packet;
+}
+
 %}
 
 %locations
-%expect 1  /* we expect a shift/reduce conflict for the | binary expression */
+%expect 3  /* we expect shift/reduce conflicts */
 /* The %union section specifies the set of possible types for values
  * for all nonterminal and terminal symbols in the grammar.
  */
@@ -443,10 +495,13 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 	s64 time_usecs;
 	enum direction_t direction;
 	enum ip_ecn_t ip_ecn;
+	struct tos_spec tos_spec;
+	struct ip_info ip_info;
 	struct mpls_stack *mpls_stack;
 	struct mpls mpls_stack_entry;
 	u16 port;
 	s32 window;
+	u16 urg_ptr;
 	u32 sequence_number;
 	struct {
 		int protocol;		/* IPPROTO_TCP or IPPROTO_UDP */
@@ -464,6 +519,10 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 	struct expression *expression;
 	struct expression_list *expression_list;
 	struct errno_spec *errno_info;
+	struct {
+		u16 src_port;
+		u16 dst_port;
+	} port_info;
 }
 
 /* The specific type of the output for a symbol is given by the %type
@@ -471,20 +530,28 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
  * have ALL_CAPS names, and nonterminal symbols have lower_case names.
  */
 %token ELLIPSIS
-%token <reserved> SA_FAMILY SIN_PORT SIN_ADDR _HTONS_ INET_ADDR
-%token <reserved> MSG_NAME MSG_IOV MSG_FLAGS
+%token <reserved> SA_FAMILY SIN_PORT SIN_ADDR _HTONS_ INET_ADDR INET6_ADDR
+%token <reserved> MSG_NAME MSG_IOV MSG_FLAGS MSG_CONTROL
+%token <reserved> CMSG_LEVEL CMSG_TYPE CMSG_DATA
 %token <reserved> FD EVENTS REVENTS ONOFF LINGER
-%token <reserved> ACK ECR EOL MSS NOP SACK SACKOK TIMESTAMP VAL WIN WSCALE PRO
-%token <reserved> FAST_OPEN
+%token <reserved> U32 U64 PTR
+%token <reserved> ACK ECR EOL MSS NOP SACK SACKOK TIMESTAMP VAL WIN WSCALE
+%token <reserved> URG MD5 FAST_OPEN FAST_OPEN_EXP
+%token <reserved> TOS FLAGS FLOWLABEL
 %token <reserved> ECT0 ECT1 CE ECT01 NO_ECN
-%token <reserved> IPV4 IPV6 ICMP UDP GRE MTU
+%token <reserved> IPV4 IPV6 ICMP UDP RAW GRE MTU ID
 %token <reserved> MPLS LABEL TC TTL
 %token <reserved> OPTION
+%token <reserved> SUM OFF KEY SEQ
+%token <reserved> NONE CHECKSUM SEQUENCE PRESENT
+%token <reserved> EE_ERRNO EE_CODE EE_DATA EE_INFO EE_ORIGIN EE_TYPE
+%token <reserved> SCM_SEC SCM_NSEC
 %token <floating> FLOAT
 %token <integer> INTEGER HEX_INTEGER
 %token <string> WORD STRING BACK_QUOTED CODE IPV4_ADDR IPV6_ADDR
 %type <direction> direction
-%type <ip_ecn> opt_ip_info
+%type <ip_info> ip_info opt_ip_info
+%type <tos_spec> tos_spec
 %type <ip_ecn> ip_ecn
 %type <option> option options opt_options
 %type <event> event events event_time action
@@ -498,26 +565,39 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 %type <mpls_stack_entry> mpls_stack_entry
 %type <integer> opt_mpls_stack_bottom
 %type <integer> opt_icmp_mtu
+%type <integer> gre_flags_list gre_flags gre_flag
+%type <integer> gre_sum gre_off gre_key gre_seq
+%type <integer> opt_icmp_echo_id
+%type <integer> flow_label
 %type <string> icmp_type opt_icmp_code flags
-%type <string> opt_tcp_fast_open_cookie tcp_fast_open_cookie
+%type <string> opt_tcp_fast_open_cookie hex_blob
 %type <string> opt_note note word_list
 %type <string> option_flag option_value script
+%type <string> opt_comma opt_equals
 %type <window> opt_window
+%type <urg_ptr> opt_urg_ptr
 %type <sequence_number> opt_ack
 %type <tcp_sequence_info> seq opt_icmp_echoed
 %type <tcp_options> opt_tcp_options tcp_option_list
 %type <tcp_option> tcp_option sack_block_list sack_block
 %type <string> function_name
 %type <expression_list> expression_list function_arguments
-%type <expression> expression binary_expression array
-%type <expression> decimal_integer hex_integer
-%type <expression> inaddr sockaddr msghdr iovec pollfd opt_revents linger
+%type <expression> expression binary_expression array sub_expr_list
+%type <expression> any_int decimal_integer hex_integer
+%type <expression> inaddr in6addr sockaddr msghdr iovec pollfd opt_revents linger
+%type <expression> opt_cmsg cmsg_expr
+%type <expression> scm_timestamping_expr
+%type <expression> sock_extended_err_expr
+%type <expression> mpls_stack_expression
+%type <expression> gre_header_expression
+%type <expression> epollev
 %type <errno_info> opt_errno
+%type <port_info> opt_port_info
 
 %%  /* The grammar follows. */
 
 script
-: opt_options opt_init_command events {
+: opt_options opt_init_command events opt_cleanup_command {
 	$$ = NULL;		/* The parser output is in out_script */
 }
 ;
@@ -548,6 +628,9 @@ option
 : option_flag '=' option_value {
 	$$ = new_option($1, $3);
 }
+| option_flag {
+	$$ = new_option($1, NULL);
+}
 
 option_flag
 : OPTION	{ $$ = $1; }
@@ -561,6 +644,30 @@ option_value
 | IPV6_ADDR	{ $$ = $1; }
 | IPV4		{ $$ = strdup("ipv4"); }
 | IPV6		{ $$ = strdup("ipv6"); }
+| WORD '=' WORD {
+	/* For consistency, allow syntax like: --define=PROTO=IPPROTO_TCP */
+	char *lhs = $1, *rhs = $3;
+
+	asprintf(&($$), "%s=%s", lhs, rhs);
+	free(lhs);
+	free(rhs);
+}
+| WORD '=' STRING {
+	/* For consistency, allow syntax like: --define=CC="reno" */
+	char *lhs = $1, *rhs = $3;
+
+	asprintf(&($$), "%s=\"%s\"", lhs, rhs);
+	free(lhs);
+	free(rhs);
+}
+| WORD '=' BACK_QUOTED {
+	/* For consistency, allow syntax like: --define=SCRIPT=`cleanup` */
+	char *lhs = $1, *rhs = $3;
+
+	asprintf(&($$), "%s=`%s`", lhs, rhs);
+	free(lhs);
+	free(rhs);
+}
 ;
 
 opt_init_command
@@ -676,23 +783,28 @@ packet_spec
 ;
 
 tcp_packet_spec
-: packet_prefix opt_ip_info flags seq opt_ack opt_window opt_tcp_options {
+: packet_prefix opt_ip_info opt_port_info flags seq opt_ack opt_window opt_urg_ptr opt_tcp_options {
 	char *error = NULL;
 	struct packet *outer = $1, *inner = NULL;
 	enum direction_t direction = outer->direction;
 
-	if (($7 == NULL) && (direction != DIRECTION_OUTBOUND)) {
+	if (($2.tos.check == TOS_CHECK_ECN) && ($2.tos.value == ECN_ECT01) &&
+	    (direction != DIRECTION_OUTBOUND)) {
+		semantic_error("[ect01] can only be used with outbound packets");
+	}
+
+	if (($9 == NULL) && (direction != DIRECTION_OUTBOUND)) {
 		yylineno = @7.first_line;
 		semantic_error("<...> for TCP options can only be used with "
 			       "outbound packets");
 	}
 
 	inner = new_tcp_packet(in_config->wire_protocol,
-			       direction, $2, $3,
-			       $4.start_sequence, $4.payload_bytes,
-			       $5, $6, $7, &error);
-	free($3);
-	free($7);
+			       direction, $2, $3.src_port, $3.dst_port, $4,
+			       $5.start_sequence, $5.payload_bytes,
+			       $6, $7, $8, $9, &error);
+	free($4);
+	free($9);
 	if (inner == NULL) {
 		assert(error != NULL);
 		semantic_error(error);
@@ -704,16 +816,21 @@ tcp_packet_spec
 ;
 
 udp_packet_spec
-: packet_prefix UDP '(' INTEGER ')' {
+: packet_prefix opt_ip_info UDP opt_port_info '(' INTEGER ')' {
 	char *error = NULL;
 	struct packet *outer = $1, *inner = NULL;
 	enum direction_t direction = outer->direction;
 
-	if (!is_valid_u16($4)) {
+	if ($2.tos.check == TOS_CHECK_ECN) {
+		semantic_error("ECN can only be used with TCP packets");
+	}
+
+	if (!is_valid_u16($6)) {
 		semantic_error("UDP payload size out of range");
 	}
 
-	inner = new_udp_packet(in_config->wire_protocol, direction, $4, &error);
+	inner = new_udp_packet(in_config->wire_protocol, direction, $2,
+			       $6, $4.src_port, $4.dst_port, &error);
 	if (inner == NULL) {
 		assert(error != NULL);
 		semantic_error(error);
@@ -725,14 +842,20 @@ udp_packet_spec
 ;
 
 icmp_packet_spec
-: packet_prefix opt_icmp_echoed ICMP icmp_type opt_icmp_code opt_icmp_mtu {
+: packet_prefix opt_ip_info ICMP icmp_type opt_icmp_code opt_icmp_mtu
+  opt_icmp_echo_id opt_icmp_echoed {
 	char *error = NULL;
 	struct packet *outer = $1, *inner = NULL;
 	enum direction_t direction = outer->direction;
 
+	if (($2.tos.check == TOS_CHECK_ECN) && ($2.tos.value == ECN_ECT01) &&
+	    (direction != DIRECTION_OUTBOUND)) {
+		semantic_error("[ect01] can only be used with outbound packets");
+	}
+
 	inner = new_icmp_packet(in_config->wire_protocol, direction, $4, $5,
-				$2.protocol, $2.start_sequence,
-				$2.payload_bytes, $6, &error);
+				$8.protocol, $8.start_sequence,
+				$8.payload_bytes, $2, $6, $7, &error);
 	free($4);
 	free($5);
 	if (inner == NULL) {
@@ -750,34 +873,41 @@ packet_prefix
 	$$ = packet_new(PACKET_MAX_HEADER_BYTES);
 	$$->direction = $1;
 }
-| packet_prefix IPV4 IPV4_ADDR '>' IPV4_ADDR ':' {
+| packet_prefix IPV4 opt_ip_info IPV4_ADDR '>' IPV4_ADDR ':' {
 	char *error = NULL;
 	struct packet *packet = $1;
-	char *ip_src = $3;
-	char *ip_dst = $5;
-	if (ipv4_header_append(packet, ip_src, ip_dst, &error))
+	u8 tos = $3.tos.value;
+	u8 ttl = $3.ttl;
+	char *ip_src = $4;
+	char *ip_dst = $6;
+	if (ipv4_header_append(packet, ip_src, ip_dst, tos, ttl, &error))
 		semantic_error(error);
 	free(ip_src);
 	free(ip_dst);
 	$$ = packet;
 }
-| packet_prefix IPV6 IPV6_ADDR '>' IPV6_ADDR ':' {
+| packet_prefix IPV6 opt_ip_info IPV6_ADDR '>' IPV6_ADDR ':' {
 	char *error = NULL;
 	struct packet *packet = $1;
-	char *ip_src = $3;
-	char *ip_dst = $5;
-	if (ipv6_header_append(packet, ip_src, ip_dst, &error))
+	u8 tos = $3.tos.value;
+	u8 hop_limit = $3.ttl;
+	char *ip_src = $4;
+	char *ip_dst = $6;
+	if (ipv6_header_append(packet, ip_src, ip_dst, tos, hop_limit, &error))
 		semantic_error(error);
 	free(ip_src);
 	free(ip_dst);
 	$$ = packet;
 }
 | packet_prefix GRE ':' {
-	char *error = NULL;
 	struct packet *packet = $1;
-	if (gre_header_append(packet, &error))
-		semantic_error(error);
-	$$ = packet;
+	struct expression *expr = new_expression(EXPR_GRE);
+	$$ = append_gre(packet, expr);
+}
+| packet_prefix GRE opt_comma gre_header_expression ':' {
+	struct packet *packet = $1;
+	struct expression *expr = $4;
+	$$ = append_gre(packet, expr);
 }
 | packet_prefix MPLS mpls_stack ':' {
 	char *error = NULL;
@@ -789,6 +919,64 @@ packet_prefix
 	free(mpls_stack);
 	$$ = packet;
 }
+;
+
+gre_header_expression
+: gre_flags_list opt_comma
+  gre_sum opt_comma
+  gre_off opt_comma
+  gre_key opt_comma
+  gre_seq {
+	$$ = new_expression(EXPR_GRE);
+	$$->value.gre.flags = htons($1);
+	$$->value.gre.be16[0] = htons($3);
+	$$->value.gre.be16[1] = htons($5);
+	$$->value.gre.be32[1] = htonl($7);
+	$$->value.gre.be32[2] = htonl($9);
+}
+;
+
+gre_flags_list
+: FLAGS '[' gre_flags ']'	{ $$ = $3; }
+| FLAGS any_int			{ $$ = $2->value.num; }
+;
+
+gre_flags
+: gre_flag			{ $$ = $1; }
+| gre_flag ',' gre_flags	{ $$ = $1 | $3; }
+;
+
+gre_flag
+: NONE 				{ $$ = 0; }
+| CHECKSUM PRESENT		{ $$ = GRE_FLAG_C; }
+| KEY PRESENT			{ $$ = GRE_FLAG_K; }
+| SEQUENCE PRESENT		{ $$ = GRE_FLAG_S; }
+;
+
+gre_sum
+: SUM any_int			{ $$ = $2->value.num; }
+;
+
+gre_off
+: OFF any_int			{ $$ = $2->value.num; }
+;
+
+gre_key
+: KEY opt_equals any_int	{ $$ = $3->value.num; }
+;
+
+gre_seq
+: SEQ any_int			{ $$ = $2->value.num; }
+;
+
+opt_comma
+:				{ $$ = NULL; }
+| ','				{ $$ = NULL; }
+;
+
+opt_equals
+:				{ $$ = NULL; }
+| '='				{ $$ = NULL; }
 ;
 
 mpls_stack
@@ -853,6 +1041,10 @@ opt_icmp_echoed
 | '[' seq ']'		{
 	$$ = $2;
 }
+| '[' RAW '(' INTEGER ')' ']'   {
+	$$.payload_bytes        = $4;
+	$$.protocol             = IPPROTO_RAW;
+}
 ;
 
 opt_icmp_mtu
@@ -860,14 +1052,46 @@ opt_icmp_mtu
 | MTU INTEGER	{ $$ = $2; }
 ;
 
+opt_icmp_echo_id
+:                { $$ = 0; }
+| ID INTEGER     { $$ = $2; }
+;
+
+opt_port_info
+:		{
+	$$.src_port		= 0;
+	$$.dst_port		= 0;
+}
+| INTEGER '>' INTEGER	{
+	if (!is_valid_u16($1)) {
+		semantic_error("src port out of range");
+	}
+	if (!is_valid_u16($3)) {
+		semantic_error("dst port out of range");
+	}
+
+	$$.src_port		= $1;
+	$$.dst_port		= $3;
+}
+;
+
 direction
 : '<'          { $$ = DIRECTION_INBOUND;  current_script_line = yylineno; }
 | '>'          { $$ = DIRECTION_OUTBOUND; current_script_line = yylineno; }
 ;
 
-opt_ip_info
-:			{ $$ = ECN_NOCHECK; }
-| '[' ip_ecn ']'	{ $$ = $2; }
+tos_spec
+: ip_ecn		{ $$.check = TOS_CHECK_ECN; $$.value = $1; }
+| TOS HEX_INTEGER	{
+	s64 tos = $2;
+
+	if (!is_valid_u8(tos)) {
+		semantic_error("tos out of range for 8 bits");
+	}
+
+	$$.check = TOS_CHECK_TOS;
+	$$.value = tos;
+}
 ;
 
 ip_ecn
@@ -883,6 +1107,55 @@ flags
 | '.'          { $$ = strdup("."); }
 | WORD '.'     { asprintf(&($$), "%s.", $1); free($1); }
 | '-'          { $$ = strdup(""); }  /* no TCP flags set in segment */
+;
+
+flow_label
+: FLOWLABEL HEX_INTEGER {
+	s64 flowlabel = $2;
+
+	if (!is_valid_u20(flowlabel)) {
+		semantic_error("flowlabel out of range for 20 bits");
+	}
+	$$ = flowlabel;
+}
+;
+
+ip_info
+: tos_spec	{
+	$$.tos.check = $1.check;
+	$$.tos.value = $1.value;
+	$$.flow_label = 0;
+	$$.ttl = 0;
+}
+| flow_label	{
+	$$.tos.check = TOS_CHECK_NONE;
+	$$.tos.value = 0;
+	$$.flow_label = $1;
+	$$.ttl = 0;
+}
+| TTL INTEGER {
+	$$.tos.check = TOS_CHECK_NONE;
+	$$.tos.value = 0;
+	$$.flow_label = 0;
+	$$.ttl = $2;
+}
+| tos_spec ',' flow_label {
+	$$.tos.check = $1.check;
+	$$.tos.value = $1.value;
+	$$.flow_label = $3;
+	$$.ttl = 0;
+}
+;
+
+opt_ip_info
+:			{
+	$$.tos.check = TOS_CHECK_NONE;
+	$$.tos.value = 0;
+	$$.flow_label = 0;
+	$$.ttl = 0;
+}
+| '(' ip_info ')'	{ $$ = $2; }
+| '[' ip_info ']'	{ $$ = $2; }
 ;
 
 seq
@@ -926,6 +1199,16 @@ opt_window
 }
 ;
 
+opt_urg_ptr
+:		{ $$ = 0; }
+| URG INTEGER	{
+	if (!is_valid_u16($2)) {
+		semantic_error("urg_ptr value out of range");
+	}
+	$$ = $2;
+}
+;
+
 opt_tcp_options
 :                             { $$ = tcp_options_new(); }
 | '<' tcp_option_list '>'     { $$ = $2; }
@@ -949,11 +1232,11 @@ tcp_option_list
 
 opt_tcp_fast_open_cookie
 :			{ $$ = strdup(""); }
-| tcp_fast_open_cookie	{ $$ = $1; }
+| hex_blob		{ $$ = $1; }
 ;
 
-tcp_fast_open_cookie
-: WORD    { $$ = strdup(yytext); }
+hex_blob
+: WORD    { $$ = $1; }
 | INTEGER { $$ = strdup(yytext); }
 ;
 
@@ -981,6 +1264,16 @@ tcp_option
 | SACK sack_block_list {
 	$$ = $2;
 }
+| MD5 hex_blob {
+	char *error = NULL;
+	$$ = new_md5_option($2, &error);
+	free($2);
+	if ($$ == NULL) {
+		assert(error != NULL);
+		semantic_error(error);
+		free(error);
+	}
+}
 | TIMESTAMP VAL INTEGER ECR INTEGER  {
 	u32 val, ecr;
 	$$ = tcp_option_new(TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP);
@@ -997,7 +1290,17 @@ tcp_option
 }
 | FAST_OPEN opt_tcp_fast_open_cookie  {
 	char *error = NULL;
-	$$ = new_tcp_fast_open_option($2, &error);
+	$$ = new_tcp_fast_open_option($2, &error, false);
+	free($2);
+	if ($$ == NULL) {
+		assert(error != NULL);
+		semantic_error(error);
+		free(error);
+	}
+}
+| FAST_OPEN_EXP opt_tcp_fast_open_cookie  {
+	char *error = NULL;
+	$$ = new_tcp_fast_open_option($2, &error, true);
 	free($2);
 	if ($$ == NULL) {
 		assert(error != NULL);
@@ -1073,8 +1376,7 @@ expression
 : ELLIPSIS          {
 	$$ = new_expression(EXPR_ELLIPSIS);
 }
-| decimal_integer   { $$ = $1; }
-| hex_integer       { $$ = $1; }
+| any_int           { $$ = $1; }
 | WORD              {
 	$$ = new_expression(EXPR_WORD);
 	$$->value.string = $1;
@@ -1098,6 +1400,9 @@ expression
 | inaddr          {
 	$$ = $1;
 }
+| in6addr          {
+	$$ = $1;
+}
 | sockaddr          {
 	$$ = $1;
 }
@@ -1113,6 +1418,32 @@ expression
 | linger            {
 	$$ = $1;
 }
+| mpls_stack_expression {
+	$$ = $1;
+}
+| cmsg_expr {
+	$$ = $1;
+}
+| scm_timestamping_expr {
+	$$ = $1;
+}
+| sub_expr_list {
+	$$ = $1;
+}
+| sock_extended_err_expr {
+	$$ = $1;
+}
+| '{' gre_header_expression '}' {
+	$$ = $2;
+}
+| epollev            {
+	$$ = $1;
+}
+;
+
+any_int
+: decimal_integer   { $$ = $1; }
+| hex_integer       { $$ = $1; }
 ;
 
 decimal_integer
@@ -1137,6 +1468,16 @@ binary_expression
 	binary->rhs = $3;
 	$$->value.binary = binary;
 }
+| WORD '=' expression {       /* symbol = value */
+	$$ = new_expression(EXPR_BINARY);
+	struct binary_expression *binary =
+			  malloc(sizeof(struct binary_expression));
+	binary->op = strdup("=");
+	binary->lhs = new_expression(EXPR_WORD);
+	binary->lhs->value.string = $1;
+	binary->rhs = $3;
+	$$->value.binary = binary;
+}
 ;
 
 array
@@ -1154,6 +1495,17 @@ inaddr
 : INET_ADDR '(' STRING ')' {
 	__be32 ip_address = inet_addr($3);
 	$$ = new_integer_expression(ip_address, "%#lx");
+}
+;
+
+in6addr
+: INET6_ADDR '(' STRING ')' {
+	struct in6_addr ipv6_address;
+	if (inet_pton(AF_INET6, $3, &ipv6_address) != 1) {
+		semantic_error("cannot parse in6_addr");
+	}
+	$$ = new_expression(EXPR_IN6_ADDR);
+	$$->value.address_ipv6 = ipv6_address;
 }
 ;
 
@@ -1192,7 +1544,8 @@ sockaddr
 msghdr
 : '{' MSG_NAME '(' ELLIPSIS ')' '=' ELLIPSIS ','
       MSG_IOV '(' decimal_integer ')' '=' array ','
-      MSG_FLAGS '=' expression '}' {
+      MSG_FLAGS '=' expression
+      opt_cmsg '}' {
 	struct msghdr_expr *msg_expr = calloc(1, sizeof(struct msghdr_expr));
 	$$ = new_expression(EXPR_MSGHDR);
 	$$->value.msghdr = msg_expr;
@@ -1200,8 +1553,66 @@ msghdr
 	msg_expr->msg_namelen	= new_expression(EXPR_ELLIPSIS);
 	msg_expr->msg_iov	= $14;
 	msg_expr->msg_iovlen	= $11;
+	msg_expr->msg_control	= $19;
 	msg_expr->msg_flags	= $18;
-	/* TODO(ncardwell): msg_control, msg_controllen */
+}
+;
+
+opt_cmsg
+:				{ $$ = new_expression(EXPR_LIST); }
+| ',' MSG_CONTROL '=' array	{ $$ = $4; }
+;
+
+cmsg_expr
+: '{' CMSG_LEVEL '=' expression ','
+      CMSG_TYPE '=' expression ','
+      CMSG_DATA '=' expression '}' {
+	struct cmsg_expr *cmsg_expr = calloc(1, sizeof(struct cmsg_expr));
+	$$ = new_expression(EXPR_CMSG);
+	$$->value.cmsg = cmsg_expr;
+	cmsg_expr->cmsg_level = $4;
+	cmsg_expr->cmsg_type  = $8;
+	cmsg_expr->cmsg_data  = $12;
+}
+;
+
+scm_timestamping_expr
+: '{' SCM_SEC '=' INTEGER ','
+      SCM_NSEC '=' INTEGER '}' {
+	struct scm_timestamping_expr *ts_expr =
+		calloc(1, sizeof(struct scm_timestamping_expr));
+	ts_expr->ts[0].tv_sec = $4;
+	ts_expr->ts[0].tv_nsec = $8;
+
+	$$ = new_expression(EXPR_SCM_TIMESTAMPING);
+	$$->value.scm_timestamping = ts_expr;
+}
+;
+
+sub_expr_list
+: '{' expression_list '}' {
+	$$ = new_expression(EXPR_LIST);
+	$$->value.list = $2;
+}
+;
+
+sock_extended_err_expr
+: '{' EE_ERRNO '=' expression ','
+      EE_ORIGIN '=' expression ','
+      EE_TYPE '=' expression ','
+      EE_CODE '=' expression ','
+      EE_INFO '=' expression ','
+      EE_DATA '=' expression '}' {
+	struct sock_extended_err_expr *ee_expr =
+		calloc(1, sizeof(struct sock_extended_err_expr));
+	ee_expr->ee_errno = $4;
+	ee_expr->ee_origin = $8;
+	ee_expr->ee_type = $12;
+	ee_expr->ee_code = $16;
+	ee_expr->ee_info = $20;
+	ee_expr->ee_data = $24;
+	$$ = new_expression(EXPR_SOCK_EXTENDED_ERR);
+	$$->value.sock_extended_err = ee_expr;
 }
 ;
 
@@ -1226,6 +1637,34 @@ pollfd
 }
 ;
 
+epollev
+: '{' EVENTS '=' expression ',' FD '=' expression '}' {
+	struct epollev_expr *epollev_expr = calloc(1, sizeof(struct epollev_expr));
+	$$ = new_expression(EXPR_EPOLLEV);
+	$$->value.epollev = epollev_expr;
+	epollev_expr->events = $4;
+	epollev_expr->fd = $8;
+} | '{' EVENTS '=' expression ',' PTR '=' expression '}' {
+	struct epollev_expr *epollev_expr = calloc(1, sizeof(struct epollev_expr));
+	$$ = new_expression(EXPR_EPOLLEV);
+	$$->value.epollev = epollev_expr;
+	epollev_expr->events = $4;
+	epollev_expr->ptr = $8;
+} | '{' EVENTS '=' expression ',' U32 '=' expression '}' {
+	struct epollev_expr *epollev_expr = calloc(1, sizeof(struct epollev_expr));
+	$$ = new_expression(EXPR_EPOLLEV);
+	$$->value.epollev = epollev_expr;
+	epollev_expr->events = $4;
+	epollev_expr->u32 = $8;
+} | '{' EVENTS '=' expression ',' U64 '=' expression '}' {
+	struct epollev_expr *epollev_expr = calloc(1, sizeof(struct epollev_expr));
+	$$ = new_expression(EXPR_EPOLLEV);
+	$$->value.epollev = epollev_expr;
+	epollev_expr->events = $4;
+	epollev_expr->u64 = $8;
+}
+;
+
 opt_revents
 :                                { $$ = new_integer_expression(0, "%ld"); }
 | ',' REVENTS '=' expression     { $$ = $4; }
@@ -1236,6 +1675,14 @@ linger
 	$$ = new_expression(EXPR_LINGER);
 	$$->value.linger.l_onoff  = $4;
 	$$->value.linger.l_linger = $8;
+}
+;
+
+mpls_stack_expression
+:
+'{' mpls_stack '}'	{
+	$$ = new_expression(EXPR_MPLS_STACK);
+	$$->value.mpls_stack = $2;
 }
 ;
 
@@ -1259,6 +1706,7 @@ note
 
 word_list
 : WORD              { $$ = $1; }
+| FLAGS             { $$ = strdup("flags"); }
 | word_list WORD    { asprintf(&($$), "%s %s", $1, $2); free($1); free($2); }
 ;
 
@@ -1278,3 +1726,14 @@ code_spec
  }
 ;
 
+opt_cleanup_command
+:			{ }
+| cleanup_command	{ }
+;
+
+cleanup_command
+: command_spec {
+	out_script->cleanup_command = $1;
+	cleanup_cmd = out_script->cleanup_command->command_line;
+}
+;

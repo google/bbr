@@ -49,6 +49,8 @@
 #include <stdio.h>
 #include "script.h"
 #include "tcp_options.h"
+#include "parse.h"
+#include "config.h"
 
 /* This include of the bison-generated .h file must go last so that we
  * can first include all of the declarations on which it depends.
@@ -73,6 +75,33 @@ static char *quoted(const char *s)
 {
 	const int delim_len = 1;
 	return strndup(s + delim_len, strlen(s) - 2*delim_len);
+}
+
+/* Check to see if the word in yytext is a user-defined symbol, and if so then
+ * return its value. Otherwise return the word itself.
+ */
+int word(void)
+{
+	char *word = yytext;
+	char *value = NULL;
+
+	/* Look in symbol table for matching user-defined symbol->value map. */
+	value = definition_get(in_config->defines, word);
+	if (value) {
+		if (value[0] == '"') {
+			yylval.string = quoted(value);		/* SYM="val" */
+			return STRING;
+		} else if (value[0] == '`') {
+			yylval.string = quoted(value);		/* SYM=`val` */
+			return BACK_QUOTED;
+		} else {
+			yylval.string = strdup(value);		/* SYM=val */
+			return WORD;
+		}
+	}
+	/* A literal word (e.g. system call name or socket option name). */
+	yylval.string = strdup(word);
+	return WORD;
 }
 
 /* Copy the code inside a code snippet that is enclosed in %{ }% after
@@ -165,7 +194,22 @@ sin_addr		return SIN_ADDR;
 msg_name		return MSG_NAME;
 msg_iov			return MSG_IOV;
 msg_flags		return MSG_FLAGS;
+msg_control		return MSG_CONTROL;
+cmsg_data		return CMSG_DATA;
+cmsg_level		return CMSG_LEVEL;
+cmsg_type		return CMSG_TYPE;
+ee_errno		return EE_ERRNO;
+ee_origin		return EE_ORIGIN;
+ee_type			return EE_TYPE;
+ee_code			return EE_CODE;
+ee_info			return EE_INFO;
+ee_data			return EE_DATA;
+scm_sec			return SCM_SEC;
+scm_nsec		return SCM_NSEC;
 fd			return FD;
+u32			return U32;
+u64			return U64;
+ptr			return PTR;
 events			return EVENTS;
 revents			return REVENTS;
 onoff			return ONOFF;
@@ -175,12 +219,23 @@ ipv4			return IPV4;
 ipv6			return IPV6;
 icmp			return ICMP;
 udp			return UDP;
+GREv0			return GRE;
 gre			return GRE;
+raw			return RAW;
+sum			return SUM;
+off			return OFF;
+key			return KEY;
+seq			return SEQ;
+none			return NONE;
+checksum		return CHECKSUM;
+sequence#		return SEQUENCE;
+present			return PRESENT;
 mpls			return MPLS;
 label			return LABEL;
 tc			return TC;
 ttl			return TTL;
 inet_addr		return INET_ADDR;
+inet6_addr		return INET6_ADDR;
 ack			return ACK;
 eol			return EOL;
 ecr			return ECR;
@@ -189,22 +244,30 @@ mtu			return MTU;
 nop			return NOP;
 sack			return SACK;
 sackOK			return SACKOK;
+md5			return MD5;
 TS			return TIMESTAMP;
 FO			return FAST_OPEN;
+FOEXP			return FAST_OPEN_EXP;
+tos			return TOS;
+flowlabel		return FLOWLABEL;
+flags			return FLAGS;
+Flags			return FLAGS;
 val			return VAL;
 win			return WIN;
+urg			return URG;
 wscale			return WSCALE;
 ect01			return ECT01;
 ect0			return ECT0;
 ect1			return ECT1;
 noecn			return NO_ECN;
 ce			return CE;
+id			return ID;
 [.][.][.]		return ELLIPSIS;
 --[a-zA-Z0-9_]+		yylval.string	= option(yytext); return OPTION;
 [-]?[0-9]*[.][0-9]+	yylval.floating	= atof(yytext);   return FLOAT;
 [-]?[0-9]+		yylval.integer	= atoll(yytext);  return INTEGER;
 0x[0-9a-fA-F]+		yylval.integer	= hextol(yytext); return HEX_INTEGER;
-[a-zA-Z0-9_]+		yylval.string	= strdup(yytext); return WORD;
+[a-zA-Z0-9_]+		return word();
 \"(\\.|[^"])*\"		yylval.string	= quoted(yytext); return STRING;
 \`(\\.|[^`])*\`		yylval.string	= quoted(yytext); return BACK_QUOTED;
 [^ \t\n]		return (int) yytext[0];

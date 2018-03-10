@@ -54,6 +54,13 @@
 #define TCP_THIN_DUPACK          17  /* Fast retrans. after 1 dupack */
 #define TCP_USER_TIMEOUT         18  /* How long to retry losses */
 #define TCP_FASTOPEN             23  /* TCP Fast Open: data in SYN */
+#define TCP_TIMESTAMP            24
+#define TCP_NOTSENT_LOWAT        25  /* limit unsent bytes in write queue */
+#define TCP_CC_INFO              26  /* Get Congestion Control (optional) info */
+#define TCP_SAVE_SYN             27  /* Record SYN headers for new connections */
+#define TCP_SAVED_SYN            28  /* Get SYN headers recorded for connection */
+#define TCP_REPAIR_WINDOW        29  /* Get/set window parameters */
+#define TCP_FASTOPEN_CONNECT     30  /* Attempt FastOpen with connect */
 
 /* TODO: remove these when netinet/tcp.h has them */
 #ifndef TCPI_OPT_ECN_SEEN
@@ -63,12 +70,16 @@
 #define TCPI_OPT_SYN_DATA	32 /* SYN-ACK acked data in SYN sent or rcvd */
 #endif
 
+#endif  /* linux */
+
 /* New TCP flags for sendto(2)/sendmsg(2). */
 #ifndef MSG_FASTOPEN
 #define MSG_FASTOPEN             0x20000000  /* TCP Fast Open: data in SYN */
 #endif
 
-#endif  /* linux */
+#ifndef MSG_ZEROCOPY
+#define MSG_ZEROCOPY		0x4000000
+#endif
 
 /* TCP option numbers and lengths. */
 #define TCPOPT_EOL		0
@@ -82,7 +93,13 @@
 #define TCPOPT_SACK		5
 #define TCPOPT_TIMESTAMP	8
 #define TCPOLEN_TIMESTAMP	10
+#define TCPOPT_MD5SIG		19	/* MD5 Signature (RFC2385) */
+#define TCPOLEN_MD5SIG		18
+#define TCPOLEN_MD5_BASE	2
+#define TCPOPT_FASTOPEN		34
 #define TCPOPT_EXP		254	/* Experimental */
+
+#define TCP_MD5_DIGEST_LEN	16	/* bytes in RFC2385 TCP MD5 digest */
 
 /* A portable TCP header definition (Linux and *BSD use different names). */
 struct tcp {
@@ -91,8 +108,7 @@ struct tcp {
 	__be32	seq;
 	__be32	ack_seq;
 #  if __BYTE_ORDER == __LITTLE_ENDIAN
-	__u16	res1:2,
-		res2:2,
+	__u16	res1:4,
 		doff:4,
 		fin:1,
 		syn:1,
@@ -104,8 +120,7 @@ struct tcp {
 		cwr:1;
 #  elif __BYTE_ORDER == __BIG_ENDIAN
 	__u16	doff:4,
-		res2:2,
-		res1:2,
+		res1:4,
 		cwr:1,
 		ece:1,
 		urg:1,
@@ -133,6 +148,7 @@ struct _tcp_info {
 	__u8	tcpi_backoff;
 	__u8	tcpi_options;
 	__u8	tcpi_snd_wscale:4, tcpi_rcv_wscale:4;
+	__u8	tcpi_delivery_rate_app_limited:1;
 
 	__u32	tcpi_rto;
 	__u32	tcpi_ato;
@@ -165,8 +181,102 @@ struct _tcp_info {
 	__u32	tcpi_rcv_space;
 
 	__u32	tcpi_total_retrans;
+
+	__u64	tcpi_pacing_rate;
+	__u64	tcpi_max_pacing_rate;
+	__u64	tcpi_bytes_acked;    /* RFC4898 tcpEStatsAppHCThruOctetsAcked */
+	__u64	tcpi_bytes_received; /* RFC4898 tcpEStatsAppHCThruOctetsReceived */
+	__u32	tcpi_segs_out;	     /* RFC4898 tcpEStatsPerfSegsOut */
+	__u32	tcpi_segs_in;	     /* RFC4898 tcpEStatsPerfSegsIn */
+
+	__u32	tcpi_notsent_bytes;
+	__u32	tcpi_min_rtt;
+	__u32	tcpi_data_segs_in;	/* RFC4898 tcpEStatsDataSegsIn */
+	__u32	tcpi_data_segs_out;	/* RFC4898 tcpEStatsDataSegsOut */
+	__u64   tcpi_delivery_rate;
+
+	__u64	tcpi_busy_time;      /* Time (usec) busy sending data */
+	__u64	tcpi_rwnd_limited;   /* Time (usec) limited by receive window */
+	__u64	tcpi_sndbuf_limited; /* Time (usec) limited by send buffer */
 };
 
+/* netlink attributes types for SCM_TIMESTAMPING_OPT_STATS */
+enum {
+	_TCP_NLA_PAD,
+	_TCP_NLA_BUSY,		/* Time (usec) busy sending data */
+	_TCP_NLA_RWND_LIMITED,	/* Time (usec) limited by receive window */
+	_TCP_NLA_SNDBUF_LIMITED,/* Time (usec) limited by send buffer */
+	_TCP_NLA_DATA_SEGS_OUT,	/* Data pkts sent including retransmission */
+	_TCP_NLA_TOTAL_RETRANS,	/* Data pkts retransmitted */
+	_TCP_NLA_PACING_RATE,	/* Pacing rate in bytes per second */
+	_TCP_NLA_DELIVERY_RATE,	/* Delivery rate in bytes per second */
+	_TCP_NLA_SND_CWND,	/* Sending congestion window */
+	_TCP_NLA_REORDERING,	/* Reordering metric */
+	_TCP_NLA_MIN_RTT,	/* minimum RTT */
+	_TCP_NLA_RECUR_RETRANS,	/* Recurring retransmits for the current pkt */
+	_TCP_NLA_DELIVERY_RATE_APP_LMT, /* delivery rate application limited ? */
+	_TCP_NLA_SNDQ_SIZE,      /* Data pending in send queue */
+	_TCP_NLA_CA_STATE,       /* ca_state of socket */
+};
+
+/* TCP ca_state */
+enum {
+	_TCP_CA_Open,
+	_TCP_CA_Disorder,
+	_TCP_CA_CWR,
+	_TCP_CA_Recovery,
+	_TCP_CA_Loss,
+};
+
+enum {
+	_SK_MEMINFO_RMEM_ALLOC,
+	_SK_MEMINFO_RCVBUF,
+	_SK_MEMINFO_WMEM_ALLOC,
+	_SK_MEMINFO_SNDBUF,
+	_SK_MEMINFO_FWD_ALLOC,
+	_SK_MEMINFO_WMEM_QUEUED,
+	_SK_MEMINFO_OPTMEM,
+	_SK_MEMINFO_BACKLOG,
+	_SK_MEMINFO_DROPS,
+
+	_SK_MEMINFO_VARS,
+};
+
+/* INET_DIAG_VEGASINFO */
+
+struct _tcpvegas_info {
+	__u32	tcpv_enabled;
+	__u32	tcpv_rttcnt;
+	__u32	tcpv_rtt;
+	__u32	tcpv_minrtt;
+};
+
+/* INET_DIAG_DCTCPINFO */
+
+struct _tcp_dctcp_info {
+	__u16	dctcp_enabled;
+	__u16	dctcp_ce_state;
+	__u32	dctcp_alpha;
+	__u32	dctcp_ab_ecn;
+	__u32	dctcp_ab_tot;
+};
+
+/* INET_DIAG_BBRINFO */
+
+struct _tcp_bbr_info {
+	/* u64 bw: max-filtered BW (app throughput) estimate in Byte per sec: */
+	__u32	bbr_bw_lo;		/* lower 32 bits of bw */
+	__u32	bbr_bw_hi;		/* upper 32 bits of bw */
+	__u32	bbr_min_rtt;		/* min-filtered RTT in uSec */
+	__u32	bbr_pacing_gain;	/* pacing gain shifted left 8 bits */
+	__u32	bbr_cwnd_gain;		/* cwnd gain shifted left 8 bits */
+};
+
+union _tcp_cc_info {
+	struct _tcpvegas_info	vegas;
+	struct _tcp_dctcp_info	dctcp;
+	struct _tcp_bbr_info	bbr;
+};
 #endif  /* linux */
 
 #if defined(__FreeBSD__)
@@ -225,6 +335,5 @@ struct _tcp_info {
 };
 
 #endif  /* __FreeBSD__ */
-
 
 #endif /* __TCP_HEADERS_H__ */

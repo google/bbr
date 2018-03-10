@@ -56,10 +56,16 @@ enum option_codes {
 	OPT_WIRE_SERVER_PORT,
 	OPT_WIRE_CLIENT_DEV,
 	OPT_WIRE_SERVER_DEV,
+	OPT_SO_FILENAME,
+	OPT_SO_FLAGS,
+	OPT_TCP_TS_ECR_SCALED,
 	OPT_TCP_TS_TICK_USECS,
 	OPT_NON_FATAL,
 	OPT_DRY_RUN,
-	OPT_VERBOSE = 'v',	/* our only single-letter option */
+	OPT_IS_ANYIP,
+	OPT_SEND_OMIT_FREE,
+	OPT_DEFINE = 'D',	/* a '-D' single-letter option */
+	OPT_VERBOSE = 'v',	/* a '-v' single-letter option */
 };
 
 /* Specification of command line options for getopt_long(). */
@@ -85,9 +91,15 @@ struct option options[] = {
 	{ "wire_server_port",	.has_arg = true,  NULL, OPT_WIRE_SERVER_PORT },
 	{ "wire_client_dev",	.has_arg = true,  NULL, OPT_WIRE_CLIENT_DEV },
 	{ "wire_server_dev",	.has_arg = true,  NULL, OPT_WIRE_SERVER_DEV },
+	{ "so_filename",	.has_arg = true,  NULL, OPT_SO_FILENAME },
+	{ "so_flags",		.has_arg = true,  NULL, OPT_SO_FLAGS },
+	{ "tcp_ts_ecr_scaled",	.has_arg = false, NULL, OPT_TCP_TS_ECR_SCALED },
 	{ "tcp_ts_tick_usecs",	.has_arg = true,  NULL, OPT_TCP_TS_TICK_USECS },
 	{ "non_fatal",		.has_arg = true,  NULL, OPT_NON_FATAL },
 	{ "dry_run",		.has_arg = false, NULL, OPT_DRY_RUN },
+	{ "is_anyip",		.has_arg = false, NULL, OPT_IS_ANYIP },
+	{ "send_omit_free",	.has_arg = false, NULL, OPT_SEND_OMIT_FREE },
+	{ "define",		.has_arg = true,  NULL, OPT_DEFINE },
 	{ "verbose",		.has_arg = false, NULL, OPT_VERBOSE },
 	{ NULL },
 };
@@ -105,11 +117,12 @@ void show_usage(void)
 		"\t[--local_ip=local_ip]\n"
 		"\t[--gateway_ip=gateway_ip]\n"
 		"\t[--netmask_ip=netmask_ip]\n"
-		"\t[--init_scripts=<comma separated filenames>]\n"
-		"\t[--speed=<speed in Mbps>]\n"
-		"\t[--mss=<MSS in bytes>]\n"
-		"\t[--mtu=<MTU in bytes>]\n"
+		"\t[--init_scripts=<comma separated filenames>\n"
+		"\t[--speed=<speed in Mbps>\n"
+		"\t[--mss=<MSS in bytes>\n"
+		"\t[--mtu=<MTU in bytes>\n"
 		"\t[--tolerance_usecs=tolerance_usecs]\n"
+		"\t[--tcp_ts_ecr_scaled]\n"
 		"\t[--tcp_ts_tick_usecs=<microseconds per TCP TS val tick>]\n"
 		"\t[--non_fatal=<comma separated types: packet,syscall>]\n"
 		"\t[--wire_client]\n"
@@ -118,7 +131,12 @@ void show_usage(void)
 		"\t[--wire_server_port=<server_port>]\n"
 		"\t[--wire_client_dev=<eth_dev_name>]\n"
 		"\t[--wire_server_dev=<eth_dev_name>]\n"
+		"\t[--so_filename=<filename>]\n"
+		"\t[--so_flags=<flags passed to SO init function>]\n"
 		"\t[--dry_run]\n"
+		"\t[--is_anyip]\n"
+		"\t[--send_omit_free]\n"
+		"\t[--define symbol1=val1 --define symbol2=val2 ...]\n"
 		"\t[--verbose|-v]\n"
 		"\tscript_path ...\n");
 }
@@ -138,8 +156,10 @@ void show_usage(void)
  */
 
 #define DEFAULT_V4_LIVE_REMOTE_IP_STRING   "192.0.2.1/24"
-#define DEFAULT_V4_LIVE_LOCAL_IP_STRING    "192.168.0.1"
-#define DEFAULT_V4_LIVE_GATEWAY_IP_STRING  "192.168.0.2"
+#define DEFAULT_V4_LIVE_LOCAL_IP_STRING    "192.168.0.0"
+/* Note : generate_random_ipv4_addr() assumes the gateway is .1
+ */
+#define DEFAULT_V4_LIVE_GATEWAY_IP_STRING  "192.168.0.1"
 #define DEFAULT_V4_LIVE_NETMASK_IP_STRING  "255.255.0.0"
 
 /* Address Configuration for IPv6
@@ -154,8 +174,8 @@ void show_usage(void)
  */
 
 #define DEFAULT_V6_LIVE_REMOTE_IP_STRING   "2001:DB8::1/32"
-#define DEFAULT_V6_LIVE_LOCAL_IP_STRING    "fd3d:fa7b:d17d::1"
-#define DEFAULT_V6_LIVE_GATEWAY_IP_STRING  "fd3d:fa7b:d17d::2"
+#define DEFAULT_V6_LIVE_LOCAL_IP_STRING    "fd3d:fa7b:d17d::0"
+#define DEFAULT_V6_LIVE_GATEWAY_IP_STRING  "fd3d:fa7b:d17d:8888::0"
 #define DEFAULT_V6_LIVE_PREFIX_LEN         48
 
 /* Fill in any as-yet-unspecified IP address attributes using IPv4 defaults. */
@@ -164,15 +184,16 @@ static void set_ipv4_defaults(struct config *config)
 	if (strlen(config->live_remote_ip_string) == 0)
 		strcpy(config->live_remote_ip_string,
 		       DEFAULT_V4_LIVE_REMOTE_IP_STRING);
-	if (strlen(config->live_local_ip_string) == 0)
-		strcpy(config->live_local_ip_string,
-		       DEFAULT_V4_LIVE_LOCAL_IP_STRING);
-	if (strlen(config->live_gateway_ip_string) == 0)
-		strcpy(config->live_gateway_ip_string,
-		       DEFAULT_V4_LIVE_GATEWAY_IP_STRING);
 	if (strlen(config->live_netmask_ip_string) == 0)
 		strcpy(config->live_netmask_ip_string,
 		       DEFAULT_V4_LIVE_NETMASK_IP_STRING);
+	if (strlen(config->live_local_ip_string) == 0)
+		generate_random_ipv4_addr(config->live_local_ip_string,
+					  DEFAULT_V4_LIVE_LOCAL_IP_STRING,
+					  config->live_netmask_ip_string);
+	if (strlen(config->live_gateway_ip_string) == 0)
+		strcpy(config->live_gateway_ip_string,
+		       DEFAULT_V4_LIVE_GATEWAY_IP_STRING);
 }
 
 /* Fill in any as-yet-unspecified IP address attributes using IPv6 defaults. */
@@ -182,8 +203,9 @@ static void set_ipv6_defaults(struct config *config)
 		strcpy(config->live_remote_ip_string,
 		       DEFAULT_V6_LIVE_REMOTE_IP_STRING);
 	if (strlen(config->live_local_ip_string) == 0)
-		strcpy(config->live_local_ip_string,
-		       DEFAULT_V6_LIVE_LOCAL_IP_STRING);
+		generate_random_ipv6_addr(config->live_local_ip_string,
+					  DEFAULT_V6_LIVE_LOCAL_IP_STRING,
+					  DEFAULT_V6_LIVE_PREFIX_LEN);
 	if (strlen(config->live_gateway_ip_string) == 0)
 		strcpy(config->live_gateway_ip_string,
 		       DEFAULT_V6_LIVE_GATEWAY_IP_STRING);
@@ -202,6 +224,8 @@ void set_default_config(struct config *config)
 	config->tolerance_usecs		= 4000;
 	config->speed			= TUN_DRIVER_SPEED_CUR;
 	config->mtu			= TUN_DRIVER_DEFAULT_MTU;
+
+	config->tcp_ts_ecr_scaled = false;
 
 	/* For now, by default we disable checks of outbound TS val
 	 * values, since there are timestamp val bugs in the tests and
@@ -258,7 +282,7 @@ static void finalize_ipv4_config(struct config *config)
 	config->live_prefix_len =
 		netmask_to_prefix(config->live_netmask_ip_string);
 	config->live_gateway_ip = ipv4_parse(config->live_gateway_ip_string);
-	config->live_bind_ip	= ipv4_parse("0.0.0.0");
+	config->live_bind_ip	= config->live_local_ip;
 	config->live_connect_ip	= config->live_remote_ip;
 	config->socket_domain	= AF_INET;
 	config->wire_protocol	= AF_INET;
@@ -278,7 +302,7 @@ static void finalize_ipv4_mapped_ipv6_config(struct config *config)
 	config->live_prefix_len =
 		netmask_to_prefix(config->live_netmask_ip_string);
 	config->live_gateway_ip = ipv4_parse(config->live_gateway_ip_string);
-	config->live_bind_ip	= ipv6_parse("::");
+	config->live_bind_ip	= ipv6_map_from_ipv4(config->live_local_ip);
 	config->live_connect_ip	= ipv6_map_from_ipv4(config->live_remote_ip);
 	config->socket_domain	= AF_INET6;
 	config->wire_protocol	= AF_INET;
@@ -297,7 +321,7 @@ static void finalize_ipv6_config(struct config *config)
 
 	config->live_prefix_len	= DEFAULT_V6_LIVE_PREFIX_LEN;
 	config->live_gateway_ip = ipv6_parse(config->live_gateway_ip_string);
-	config->live_bind_ip	= ipv6_parse("::");
+	config->live_bind_ip	= config->live_local_ip;
 	config->live_connect_ip	= config->live_remote_ip;
 	config->socket_domain	= AF_INET6;
 	config->wire_protocol	= AF_INET6;
@@ -348,7 +372,7 @@ static void process_option(int opt, char *optarg, struct config *config,
 			   char *where)
 {
 	int port = 0;
-	char *end = NULL;
+	char *end = NULL, *equals = NULL, *symbol = NULL, *value = NULL;
 	unsigned long speed = 0;
 
 	DEBUGP("process_option %d ('%c') = %s\n",
@@ -425,6 +449,9 @@ static void process_option(int opt, char *optarg, struct config *config,
 		if (config->tolerance_usecs <= 0)
 			die("%s: bad --tolerance_usecs: %s\n", where, optarg);
 		break;
+	case OPT_TCP_TS_ECR_SCALED:
+		config->tcp_ts_ecr_scaled = true;
+		break;
 	case OPT_TCP_TS_TICK_USECS:
 		config->tcp_ts_tick_usecs = atoi(optarg);
 		if (config->tcp_ts_tick_usecs < 0 ||
@@ -454,8 +481,28 @@ static void process_option(int opt, char *optarg, struct config *config,
 	case OPT_WIRE_SERVER_DEV:
 		config->wire_server_device = strdup(optarg);
 		break;
+	case OPT_SO_FILENAME:
+		config->so_filename = strdup(optarg);
+		break;
+	case OPT_SO_FLAGS:
+		config->so_flags = strdup(optarg);
+		break;
 	case OPT_DRY_RUN:
 		config->dry_run = true;
+		break;
+	case OPT_IS_ANYIP:
+		config->is_anyip = true;
+		break;
+	case OPT_SEND_OMIT_FREE:
+		config->send_omit_free = true;
+		break;
+	case OPT_DEFINE:
+		equals = strstr(optarg, "=");
+		if (equals == optarg || equals == NULL)
+			die("%s: bad definition: %s\n", where, optarg);
+		symbol = strndup(optarg, equals - optarg);
+	        value = strdup(equals + 1);
+		definition_set(&config->defines, symbol, value);
 		break;
 	case OPT_VERBOSE:
 		config->verbose = true;
@@ -491,7 +538,7 @@ char **parse_command_line_options(int argc, char *argv[],
 
 	/* Parse the arguments. */
 	optind = 0;
-	while ((c = getopt_long(argc, argv, "v", options, NULL)) > 0)
+	while ((c = getopt_long(argc, argv, "vD:", options, NULL)) > 0)
 		process_option(c, optarg, config, "Command Line");
 	return argv + optind;
 }
@@ -509,15 +556,21 @@ static void parse_script_options(struct config *config,
 				break;
 			}
 		}
-		if (c != 0) {
-			process_option(options[i].val,
-				       opt->value, config,
-				       config->script_path);
-		} else {
-			die("%s: option '%s' unknown in file: %s\n",
-			    config->script_path, opt->name,
-			    config->script_path);
-		}
+
+		if (!c)
+			die("%s: option '%s' unknown\n",
+			    config->script_path, opt->name);
+		if (opt->value && !options[i].has_arg)
+			die("%s: option '%s' forbids an argument\n",
+			    config->script_path, opt->name);
+		if (!opt->value && options[i].has_arg)
+			die("%s: option '%s' requires an argument\n",
+			    config->script_path, opt->name);
+
+		process_option(options[i].val,
+			       opt->value, config,
+			       config->script_path);
+
 		opt = opt->next;
 	}
 }

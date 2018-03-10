@@ -28,7 +28,7 @@
 #include "tcp.h"
 
 /* The full list of valid TCP bit flag characters */
-static const char valid_tcp_flags[] = "FSRP.EWC";
+static const char valid_tcp_flags[] = "FSRP.EWCU";
 
 /* Are all the TCP flags in the given string valid? */
 static bool is_tcp_flags_spec_valid(const char *flags, char **error)
@@ -52,12 +52,15 @@ static inline int is_tcp_flag_set(char flag, const char *flags)
 
 struct packet *new_tcp_packet(int address_family,
 			       enum direction_t direction,
-			       enum ip_ecn_t ecn,
+			       struct ip_info ip_info,
+			       u16 src_port,
+			       u16 dst_port,
 			       const char *flags,
 			       u32 start_sequence,
 			       u16 tcp_payload_bytes,
 			       u32 ack_sequence,
 			       s32 window,
+			       u16 urg_ptr,
 			       const struct tcp_options *tcp_options,
 			       char **error)
 {
@@ -108,11 +111,12 @@ struct packet *new_tcp_packet(int address_family,
 
 	packet->direction = direction;
 	packet->flags = 0;
-	packet->ecn = ecn;
+	packet->tos_chk = ip_info.tos.check;
 
 	/* Set IP header fields */
-	set_packet_ip_header(packet, address_family, ip_bytes, ecn,
-			     IPPROTO_TCP);
+	set_packet_ip_header(packet, address_family, ip_bytes,
+			     ip_info.tos.value, ip_info.flow_label,
+			     ip_info.ttl, IPPROTO_TCP);
 
 	tcp_header = packet_append_header(packet, HEADER_TCP, tcp_header_bytes);
 	tcp_header->total_bytes = tcp_header_bytes + tcp_payload_bytes;
@@ -122,8 +126,8 @@ struct packet *new_tcp_packet(int address_family,
 	u8 *tcp_option_start = (u8 *) (packet->tcp + 1);
 
 	/* Set TCP header fields */
-	packet->tcp->src_port = htons(0);
-	packet->tcp->dst_port = htons(0);
+	packet->tcp->src_port = htons(src_port);
+	packet->tcp->dst_port = htons(dst_port);
 	packet->tcp->seq = htonl(start_sequence);
 	packet->tcp->ack_seq = htonl(ack_sequence);
 	packet->tcp->doff = tcp_header_bytes / 4;
@@ -139,13 +143,13 @@ struct packet *new_tcp_packet(int address_family,
 		packet->tcp->window = htons(window);
 	}
 	packet->tcp->check = 0;
-	packet->tcp->urg_ptr = 0;
+	packet->tcp->urg_ptr = htons(urg_ptr);
 	packet->tcp->fin = is_tcp_flag_set('F', flags);
 	packet->tcp->syn = is_tcp_flag_set('S', flags);
 	packet->tcp->rst = is_tcp_flag_set('R', flags);
 	packet->tcp->psh = is_tcp_flag_set('P', flags);
 	packet->tcp->ack = is_tcp_flag_set('.', flags);
-	packet->tcp->urg = 0;
+	packet->tcp->urg = is_tcp_flag_set('U', flags);
 	packet->tcp->ece = is_tcp_flag_set('E', flags);
 	packet->tcp->cwr = is_tcp_flag_set('W', flags);
 

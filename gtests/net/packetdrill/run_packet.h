@@ -40,7 +40,7 @@ struct packets {
 };
 
 /* Allocate and return internal state for the packets module. */
-extern struct packets *packets_new(void);
+extern struct packets *packets_new(const struct state *state);
 
 /* Tear down packets module state and free up the resources it has allocated. */
 extern void packets_free(struct packets *packets);
