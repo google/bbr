@@ -222,6 +222,7 @@ enum {
 	_TCP_NLA_DELIVERY_RATE_APP_LMT, /* delivery rate application limited ? */
 	_TCP_NLA_SNDQ_SIZE,      /* Data pending in send queue */
 	_TCP_NLA_CA_STATE,       /* ca_state of socket */
+	_TCP_NLA_SND_SSTHRESH,   /* Slow start size threshold */
 };
 
 /* TCP ca_state */
@@ -232,6 +233,8 @@ enum {
 	_TCP_CA_Recovery,
 	_TCP_CA_Loss,
 };
+
+#define TCP_INFINITE_SSTHRESH	0x7fffffff
 
 enum {
 	_SK_MEMINFO_RMEM_ALLOC,
