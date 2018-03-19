@@ -441,8 +441,10 @@ static void get_nla_value(const struct expression *expr, void *out_buf,
  * expressions of the form: key = val.
  */
 static int nla_expr_list_to_nla(struct expression_list *list,
-				void *dst, int *len,
-				struct nla_type_info *nla_info, char **error)
+				void *dst, int dst_len, int *len,
+				struct nla_type_info *nla_info,
+				int nla_info_len,
+				char **error)
 {
 	struct expression *element, *key, *value;
 	void *start = dst;
@@ -470,6 +472,10 @@ static int nla_expr_list_to_nla(struct expression_list *list,
 		}
 
 		key_num = key->value.num;
+		if (key_num < 0 || key_num >= nla_info_len) {
+			asprintf(error, "bad NLA type %lld\n", key_num);
+			return STATUS_ERR;
+		}
 		val_num = value->value.num;
 		num_bytes = nla_info[key_num].length;
 		if (num_bytes == sizeof(u8) &&
@@ -588,8 +594,12 @@ static int cmsg_new(const struct expression *expr, struct msghdr *msg,
 
 		case EXPR_LIST:
 			stats_expr = cmsg_expr->cmsg_data->value.list;
-			if (nla_expr_list_to_nla(stats_expr, data, &len,
-						 tcp_nla, error))
+			if (nla_expr_list_to_nla(stats_expr, data,
+						 (MSGHDR_MAX_CONTROLLEN - sum
+						  - sizeof(struct cmsghdr)),
+						 &len,
+						 tcp_nla, ARRAY_SIZE(tcp_nla),
+						 error))
 				goto error_out;
 			break;
 
