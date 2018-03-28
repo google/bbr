@@ -132,6 +132,8 @@ struct int_symbol platform_symbols_table[] = {
 	{ _TCP_NLA_SNDQ_SIZE,               "TCP_NLA_SNDQ_SIZE"               },
 	{ _TCP_NLA_CA_STATE,		    "TCP_NLA_CA_STATE"		      },
 	{ _TCP_NLA_SND_SSTHRESH,   	    "TCP_NLA_SND_SSTHRESH"	      },
+	{ _TCP_NLA_DELIVERED,		    "TCP_NLA_DELIVERED"               },
+	{ _TCP_NLA_DELIVERED_CE,            "TCP_NLA_DELIVERED_CE"            },
 
 	{ _TCP_CA_Open,			    "TCP_CA_OPEN"		      },
 	{ _TCP_CA_Disorder,		    "TCP_CA_DISORDER"		      },

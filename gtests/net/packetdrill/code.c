@@ -194,6 +194,8 @@ static void write_tcp_info(struct code_state *code,
 	emit_var(code, "tcpi_busy_time",	info->tcpi_busy_time);
 	emit_var(code, "tcpi_rwnd_limited",	info->tcpi_rwnd_limited);
 	emit_var(code, "tcpi_sndbuf_limited",	info->tcpi_sndbuf_limited);
+	emit_var(code, "tcpi_delivered",	info->tcpi_delivered);
+	emit_var(code, "tcpi_delivered_ce",	info->tcpi_delivered_ce);
 
 	emit_var_end(code);
 }

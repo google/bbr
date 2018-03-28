@@ -519,6 +519,8 @@ struct nla_type_info tcp_nla[] = {
 	[_TCP_NLA_SNDQ_SIZE] = {"TCP_NLA_SNDQ_SIZE", sizeof(u32)},
 	[_TCP_NLA_CA_STATE] = {"TCP_NLA_CA_STATE", sizeof(u8)},
 	[_TCP_NLA_SND_SSTHRESH] = {"TCP_NLA_SND_SSTHRESH", sizeof(u32)},
+	[_TCP_NLA_DELIVERED] = {"TCP_NLA_DELIVERED", sizeof(u32)},
+	[_TCP_NLA_DELIVERED_CE] = {"TCP_NLA_DELIVERED_CE", sizeof(u32)},
 };
 
 /* Allocate and fill a msg_control described by the given expression.
@@ -776,6 +778,8 @@ static bool scm_opt_stats_expect_eq(struct state *state,
 		case _TCP_NLA_MIN_RTT:
 		case _TCP_NLA_SNDQ_SIZE:
 		case _TCP_NLA_SND_SSTHRESH:
+		case _TCP_NLA_DELIVERED:
+		case _TCP_NLA_DELIVERED_CE:
 			ev_u32 = *(u32 *) ((void *) enla + NLA_HDRLEN);
 			av_u32 = *(u32 *) ((void *) anla + NLA_HDRLEN);
 			if (ev_u32 == av_u32 ||

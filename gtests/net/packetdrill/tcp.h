@@ -203,6 +203,9 @@ struct _tcp_info {
 	__u64	tcpi_busy_time;      /* Time (usec) busy sending data */
 	__u64	tcpi_rwnd_limited;   /* Time (usec) limited by receive window */
 	__u64	tcpi_sndbuf_limited; /* Time (usec) limited by send buffer */
+
+	__u32	tcpi_delivered;
+	__u32	tcpi_delivered_ce;
 };
 
 /* netlink attributes types for SCM_TIMESTAMPING_OPT_STATS */
@@ -223,6 +226,8 @@ enum {
 	_TCP_NLA_SNDQ_SIZE,      /* Data pending in send queue */
 	_TCP_NLA_CA_STATE,       /* ca_state of socket */
 	_TCP_NLA_SND_SSTHRESH,   /* Slow start size threshold */
+	_TCP_NLA_DELIVERED,      /* Data pkts delivered incl. out-of-order */
+	_TCP_NLA_DELIVERED_CE,   /* Like above but only ones w/ CE marks */
 };
 
 /* TCP ca_state */
