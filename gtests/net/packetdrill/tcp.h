@@ -62,6 +62,11 @@
 #define TCP_REPAIR_WINDOW        29  /* Get/set window parameters */
 #define TCP_FASTOPEN_CONNECT     30  /* Attempt FastOpen with connect */
 
+#ifndef TCP_INQ
+#define TCP_INQ			 36
+#define TCP_CM_INQ		 TCP_INQ
+#endif
+
 /* TODO: remove these when netinet/tcp.h has them */
 #ifndef TCPI_OPT_ECN_SEEN
 #define TCPI_OPT_ECN_SEEN	16 /* received at least one packet with ECT */

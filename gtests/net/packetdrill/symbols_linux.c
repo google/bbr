@@ -179,6 +179,9 @@ struct int_symbol platform_symbols_table[] = {
 	{ TCP_FASTOPEN_CONNECT,             "TCP_FASTOPEN_CONNECT"            },
 	{ TCP_TIMESTAMP,                    "TCP_TIMESTAMP"                   },
 	{ TCP_NOTSENT_LOWAT,                "TCP_NOTSENT_LOWAT"               },
+	{ TCP_INQ,			    "TCP_INQ"			      },
+
+	{ TCP_CM_INQ,			    "TCP_CM_INQ"		      },
 
 	{ O_RDONLY,                         "O_RDONLY"                        },
 	{ O_WRONLY,                         "O_WRONLY"                        },
