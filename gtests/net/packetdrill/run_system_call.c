@@ -1632,18 +1632,20 @@ static int run_syscall_pipe(struct state *state, int *pfd_script, int *pfd_live,
 static int syscall_socket(struct state *state, struct syscall_spec *syscall,
 			  struct expression_list *args, char **error)
 {
-	int domain, type, protocol, live_fd, script_fd, result;
+	int domain = state->config->socket_domain;
+	int type, protocol, live_fd, script_fd, result;
 
 	if (check_arg_count(args, 3, error))
 		return STATUS_ERR;
+
 	if (ellipsis_arg(args, 0, error))
-		return STATUS_ERR;
+		if (s32_arg(args, 0, &domain, error))
+			return STATUS_ERR;
+
 	if (s32_arg(args, 1, &type, error))
 		return STATUS_ERR;
 	if (s32_arg(args, 2, &protocol, error))
 		return STATUS_ERR;
-
-	domain = state->config->socket_domain;
 
 	begin_syscall(state, syscall);
 

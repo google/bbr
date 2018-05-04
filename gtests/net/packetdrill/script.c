@@ -89,14 +89,17 @@ const char *expression_type_to_string(enum expression_t type)
 struct int_symbol cross_platform_symbols[] = {
 	{ AF_INET,                          "AF_INET"                         },
 	{ AF_INET6,                         "AF_INET6"                        },
+	{ AF_PACKET,                        "AF_PACKET"                       },
 
 	{ PF_INET,                          "PF_INET"                         },
 	{ PF_INET6,                         "PF_INET6"                        },
 
+	{ SOCK_RAW,                         "SOCK_RAW"                        },
 	{ SOCK_STREAM,                      "SOCK_STREAM"                     },
 	{ SOCK_DGRAM,                       "SOCK_DGRAM"                      },
 	{ SOCK_NONBLOCK,                    "SOCK_NONBLOCK"                   },
 
+	{ IPPROTO_RAW,                      "IPPROTO_RAW"                     },
 	{ IPPROTO_IP,                       "IPPROTO_IP"                      },
 	{ IPPROTO_IPV6,                     "IPPROTO_IPV6"                    },
 	{ IPPROTO_ICMP,                     "IPPROTO_ICMP"                    },
