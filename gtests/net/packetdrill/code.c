@@ -664,7 +664,6 @@ static void *get_data(struct state *state, struct event *event,
 {
 	int opt_name = 0;
 	int data_len = 0;
-	int min_data_len = 0;
 	int level;
 
 	assert(data_type > DATA_NONE);
@@ -678,7 +677,6 @@ static void *get_data(struct state *state, struct event *event,
 	case DATA_TCP_INFO:
 		opt_name = TCP_INFO;
 		data_len = sizeof(struct _tcp_info);
-		min_data_len = data_len;
 		level = SOL_TCP;
 		break;
 #endif  /* HAVE_TCP_INFO */
@@ -686,7 +684,6 @@ static void *get_data(struct state *state, struct event *event,
 	case DATA_TCP_CC_INFO:
 		opt_name = TCP_CC_INFO;
 		data_len = sizeof(union _tcp_cc_info);
-		min_data_len = 0;  /* Not all C.C. support this opt */
 		level = SOL_TCP;
 		break;
 #endif  /* HAVE_TCP_CC_INFO */
@@ -694,7 +691,6 @@ static void *get_data(struct state *state, struct event *event,
 	case DATA_SO_MEMINFO:
 		opt_name = SO_MEMINFO;
 		data_len = sizeof(u32) * _SK_MEMINFO_VARS;
-		min_data_len = data_len;
 		level = SOL_SOCKET;
 		break;
 #endif	/* HAVE_SO_MEMINFO */
@@ -709,12 +705,6 @@ static void *get_data(struct state *state, struct event *event,
 	if (result < 0) {
 		free(data);
 		return NULL;
-	}
-	if (opt_len < min_data_len) {
-		die("%s:%d: expected getsockopt(SOL_TCP, %d) output "
-		    "of at least %d bytes; got %d bytes\n",
-		    state->config->script_path, event->line_number,
-		    opt_name, min_data_len, opt_len);
 	}
 	*len = opt_len;
 	return data;
