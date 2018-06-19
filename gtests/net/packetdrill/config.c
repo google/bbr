@@ -227,7 +227,15 @@ void set_default_config(struct config *config)
 	config->ip_version		= IP_VERSION_4;
 	config->live_bind_port		= 8080;
 	config->live_connect_port	= 8080;
-	config->tolerance_percent	= 0.5; /* 5ms / second */
+
+	/* No more slack on modern (v4.8) linux kernels for jiffie based timers
+	 * According to commit 500462a9de657f86edaa102f8ab6bff7f7e43fc2
+	 * ("timers: Switch to a non-cascading wheel"),
+	 * the worst case inaccuracy is 12.5%
+	 */
+
+	config->tolerance_percent	= 12.5;
+
 	config->tolerance_usecs		= 4000;
 	config->speed			= TUN_DRIVER_SPEED_CUR;
 	config->mtu			= TUN_DRIVER_DEFAULT_MTU;
