@@ -587,6 +587,26 @@ static int map_inbound_packet(
 	return STATUS_OK;
 }
 
+static int tcp_convert_seq_number(struct socket *socket, struct packet *packet,
+				  char **error)
+{
+	/* Rewrite TCP sequence number from live to script space. */
+	const bool is_syn = packet->tcp->syn;
+	const u32 seq_offset = local_seq_live_to_script_offset(socket, is_syn);
+	packet->tcp->seq =
+	    htonl(ntohl(packet->tcp->seq) + seq_offset);
+
+	/* Rewrite ACKs and SACKs from live to script space. */
+	const u32 ack_offset = remote_seq_live_to_script_offset(socket, is_syn);
+	if (packet->tcp->ack)
+		packet->tcp->ack_seq =
+		    htonl(ntohl(packet->tcp->ack_seq) + ack_offset);
+	if (offset_sack_blocks(packet, ack_offset, error))
+		return STATUS_ERR;
+
+	return STATUS_OK;
+}
+
 /* Transforms values in the 'actual_packet' by mapping outbound packet
  * values in the sniffed 'live_packet' (address 4-tuple, sequence
  * number in seq, timestamp value) from live values to script values
@@ -621,20 +641,6 @@ static int map_outbound_live_packet(
 	/* If no TCP headers to rewrite, then we're done. */
 	if (live_packet->tcp == NULL)
 		return STATUS_OK;
-
-	/* Rewrite TCP sequence number from live to script space. */
-	const bool is_syn = live_packet->tcp->syn;
-	const u32 seq_offset = local_seq_live_to_script_offset(socket, is_syn);
-	actual_packet->tcp->seq =
-	    htonl(ntohl(live_packet->tcp->seq) + seq_offset);
-
-	/* Rewrite ACKs and SACKs from live to script space. */
-	const u32 ack_offset = remote_seq_live_to_script_offset(socket, is_syn);
-	if (actual_packet->tcp->ack)
-		actual_packet->tcp->ack_seq =
-		    htonl(ntohl(live_packet->tcp->ack_seq) + ack_offset);
-	if (offset_sack_blocks(actual_packet, ack_offset, error))
-		return STATUS_ERR;
 
 	/* Extract location of script and actual TCP timestamp values. */
 	if (find_tcp_timestamp(script_packet, error))
@@ -1404,7 +1410,8 @@ out:
 static int verify_packet_fragments(
 	const struct packet *current_fragment,
 	const struct packet *previous_fragment,
-	int current_payload, int expected_payload, char **error)
+	int current_payload, int sniffed_payload,
+	int expected_total_payload, char **error)
 {
 	/* Ensure that current fragment headers match the previous fragment
 	 * headers.
@@ -1416,12 +1423,16 @@ static int verify_packet_fragments(
 	/* If this is not the last fragment, also check that its payload matches
 	 * the payload of the previous fragment.
 	 */
-	if (current_payload < expected_payload && current_payload !=
-			packet_payload_len(previous_fragment)) {
+	if (current_payload < expected_total_payload - sniffed_payload &&
+	    current_payload != packet_payload_len(previous_fragment)) {
 		asprintf(error, "fragment payload: expected %d bytes vs "
+				"actual %d bytes; "
+				"total payload: expected %d bytes vs "
 				"actual %d bytes",
 			 packet_payload_len(previous_fragment),
-			 current_payload);
+			 current_payload,
+			 expected_total_payload,
+			 current_payload + sniffed_payload);
 		return STATUS_ERR;
 	}
 	return STATUS_OK;
@@ -1596,8 +1607,12 @@ static int do_outbound_script_packet(
 		/* Save the TCP header so we can reset the connection at the
 		 * end.
 		 */
-		if (live_packet->tcp)
+		if (live_packet->tcp) {
 			socket->last_outbound_tcp_header = *(live_packet->tcp);
+			/* Rewrite TCP sequence number */
+			if (tcp_convert_seq_number(socket, live_packet, error))
+				goto out;
+		}
 
 		sniffed = packet_list_new();
 		sniffed->packet = live_packet;
@@ -1641,8 +1656,8 @@ static int do_outbound_script_packet(
 						sniffed->packet,
 						sniffed_packets_end->packet,
 						live_payload,
-						expected_payload_len -
-							sniffed_payload_len,
+						sniffed_payload_len,
+						expected_payload_len,
 						error)) {
 					packet_list_free(sniffed);
 					goto out;
