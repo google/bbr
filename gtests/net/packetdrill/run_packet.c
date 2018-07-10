@@ -728,22 +728,22 @@ static int verify_outbound_live_tos(enum tos_chk_t tos_chk,
 				    u8 script_tos_byte,
 				    char **error)
 {
-	if (tos_chk == TOS_CHECK_ECN) {
-		u8 actual_ecn_bits = actual_tos_byte & IP_ECN_MASK;
-		if (script_tos_byte == ECN_ECT01) {
-			if ((actual_ecn_bits != IP_ECN_ECT0) &&
-			    (actual_ecn_bits != IP_ECN_ECT1)) {
-				asprintf(error, "live packet field ip_ecn: "
+	u8 actual_ecn_bits = actual_tos_byte & IP_ECN_MASK;
+
+	if (tos_chk == TOS_CHECK_ECN_ECT01) {
+		if ((actual_ecn_bits != IP_ECN_ECT0) &&
+		    (actual_ecn_bits != IP_ECN_ECT1)) {
+			asprintf(error, "live packet field ip_ecn: "
 					 "expected: 0x1 or 0x2 vs actual: 0x%x",
 					 actual_ecn_bits);
-				return STATUS_ERR;
-			}
-		} else if (check_field("ip_ecn",
-				       script_tos_byte,
-				       actual_ecn_bits,
-				       error)) {
 			return STATUS_ERR;
 		}
+	} else if (tos_chk == TOS_CHECK_ECN) {
+		if (check_field("ip_ecn",
+				script_tos_byte,
+				actual_ecn_bits,
+				error))
+			return STATUS_ERR;
 	} else if (tos_chk == TOS_CHECK_TOS) {
 		if (check_field("tos",
 				script_tos_byte,

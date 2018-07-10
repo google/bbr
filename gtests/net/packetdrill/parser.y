@@ -494,7 +494,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 	char *reserved;
 	s64 time_usecs;
 	enum direction_t direction;
-	enum ip_ecn_t ip_ecn;
+	u8 ip_ecn;
 	struct tos_spec tos_spec;
 	struct ip_info ip_info;
 	struct mpls_stack *mpls_stack;
@@ -788,7 +788,7 @@ tcp_packet_spec
 	struct packet *outer = $1, *inner = NULL;
 	enum direction_t direction = outer->direction;
 
-	if (($2.tos.check == TOS_CHECK_ECN) && ($2.tos.value == ECN_ECT01) &&
+	if (($2.tos.check == TOS_CHECK_ECN_ECT01) &&
 	    (direction != DIRECTION_OUTBOUND)) {
 		semantic_error("[ect01] can only be used with outbound packets");
 	}
@@ -848,7 +848,7 @@ icmp_packet_spec
 	struct packet *outer = $1, *inner = NULL;
 	enum direction_t direction = outer->direction;
 
-	if (($2.tos.check == TOS_CHECK_ECN) && ($2.tos.value == ECN_ECT01) &&
+	if (($2.tos.check == TOS_CHECK_ECN_ECT01) &&
 	    (direction != DIRECTION_OUTBOUND)) {
 		semantic_error("[ect01] can only be used with outbound packets");
 	}
@@ -1082,6 +1082,7 @@ direction
 
 tos_spec
 : ip_ecn		{ $$.check = TOS_CHECK_ECN; $$.value = $1; }
+| ECT01			{ $$.check = TOS_CHECK_ECN_ECT01; $$.value = 0; }
 | TOS HEX_INTEGER	{
 	s64 tos = $2;
 
@@ -1095,11 +1096,10 @@ tos_spec
 ;
 
 ip_ecn
-: NO_ECN		{ $$ = ECN_NONE; }
-| ECT0		{ $$ = ECN_ECT0; }
-| ECT1		{ $$ = ECN_ECT1; }
-| ECT01		{ $$ = ECN_ECT01; }
-| CE		{ $$ = ECN_CE; }
+: NO_ECN	{ $$ = IP_ECN_NONE; }
+| ECT0		{ $$ = IP_ECN_ECT0; }
+| ECT1		{ $$ = IP_ECN_ECT1; }
+| CE		{ $$ = IP_ECN_CE; }
 ;
 
 flags

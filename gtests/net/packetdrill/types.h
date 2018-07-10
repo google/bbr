@@ -100,21 +100,13 @@ static inline enum direction_t reverse_direction(enum direction_t direction)
 enum tos_chk_t {
 	TOS_CHECK_NONE,
 	TOS_CHECK_ECN,
+	TOS_CHECK_ECN_ECT01,  /* for outbound packet, either ECT0/ECT1 is OK */
 	TOS_CHECK_TOS,
 };
 
 struct tos_spec {
 	enum tos_chk_t check;
 	u8 value;
-};
-
-/* IPv4 ECN treatment for a packet. */
-enum ip_ecn_t {
-	ECN_NONE,
-	ECN_ECT0,
-	ECN_ECT1,
-	ECN_CE,
-	ECN_ECT01,
 };
 
 #define TTL_CHECK_NONE 255
