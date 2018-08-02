@@ -196,6 +196,10 @@ static void write_tcp_info(struct code_state *code,
 	emit_var(code, "tcpi_sndbuf_limited",	info->tcpi_sndbuf_limited);
 	emit_var(code, "tcpi_delivered",	info->tcpi_delivered);
 	emit_var(code, "tcpi_delivered_ce",	info->tcpi_delivered_ce);
+	emit_var(code, "tcpi_bytes_sent",	info->tcpi_bytes_sent);
+	emit_var(code, "tcpi_bytes_retrans",	info->tcpi_bytes_retrans);
+	emit_var(code, "tcpi_dsack_dups",	info->tcpi_dsack_dups);
+	emit_var(code, "tcpi_reord_seen",	info->tcpi_reord_seen);
 
 	emit_var_end(code);
 }

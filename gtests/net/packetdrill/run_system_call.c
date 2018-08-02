@@ -521,6 +521,10 @@ struct nla_type_info tcp_nla[] = {
 	[_TCP_NLA_SND_SSTHRESH] = {"TCP_NLA_SND_SSTHRESH", sizeof(u32)},
 	[_TCP_NLA_DELIVERED] = {"TCP_NLA_DELIVERED", sizeof(u32)},
 	[_TCP_NLA_DELIVERED_CE] = {"TCP_NLA_DELIVERED_CE", sizeof(u32)},
+	[_TCP_NLA_BYTES_SENT] = {"TCP_NLA_BYTES_SENT", sizeof(u64)},
+	[_TCP_NLA_BYTES_RETRANS] = {"TCP_NLA_BYTES_RETRANS", sizeof(u64)},
+	[_TCP_NLA_DSACK_DUPS] = {"TCP_NLA_DSACK_DUPS", sizeof(u32)},
+	[_TCP_NLA_REORD_SEEN] = {"TCP_NLA_REORD_SEEN", sizeof(u32)},
 };
 
 /* Allocate and fill a msg_control described by the given expression.
@@ -765,6 +769,8 @@ static bool scm_opt_stats_expect_eq(struct state *state,
 		case _TCP_NLA_TOTAL_RETRANS:
 		case _TCP_NLA_PACING_RATE:
 		case _TCP_NLA_DELIVERY_RATE:
+		case _TCP_NLA_BYTES_SENT:
+		case _TCP_NLA_BYTES_RETRANS:
 			ev = *(u64 *) ((void *) enla + NLA_HDRLEN);
 			av = *(u64 *) ((void *) anla + NLA_HDRLEN);
 			if (ev == av || ev == OPT_NLA_IGNORE_VAL)
@@ -780,6 +786,8 @@ static bool scm_opt_stats_expect_eq(struct state *state,
 		case _TCP_NLA_SND_SSTHRESH:
 		case _TCP_NLA_DELIVERED:
 		case _TCP_NLA_DELIVERED_CE:
+		case _TCP_NLA_DSACK_DUPS:
+		case _TCP_NLA_REORD_SEEN:
 			ev_u32 = *(u32 *) ((void *) enla + NLA_HDRLEN);
 			av_u32 = *(u32 *) ((void *) anla + NLA_HDRLEN);
 			if (ev_u32 == av_u32 ||

@@ -206,6 +206,11 @@ struct _tcp_info {
 
 	__u32	tcpi_delivered;
 	__u32	tcpi_delivered_ce;
+
+	__u64	tcpi_bytes_sent;     /* RFC4898 tcpEStatsPerfHCDataOctetsOut */
+	__u64	tcpi_bytes_retrans;  /* RFC4898 tcpEStatsPerfOctetsRetrans */
+	__u32	tcpi_dsack_dups;     /* RFC4898 tcpEStatsStackDSACKDups */
+	__u32	tcpi_reord_seen;     /* reordering events seen */
 };
 
 /* netlink attributes types for SCM_TIMESTAMPING_OPT_STATS */
@@ -228,6 +233,10 @@ enum {
 	_TCP_NLA_SND_SSTHRESH,   /* Slow start size threshold */
 	_TCP_NLA_DELIVERED,      /* Data pkts delivered incl. out-of-order */
 	_TCP_NLA_DELIVERED_CE,   /* Like above but only ones w/ CE marks */
+	_TCP_NLA_BYTES_SENT,	/* Data bytes sent including retransmission */
+	_TCP_NLA_BYTES_RETRANS,	/* Data bytes retransmitted */
+	_TCP_NLA_DSACK_DUPS,	/* DSACK blocks received */
+	_TCP_NLA_REORD_SEEN,	/* reordering events seen */
 };
 
 /* TCP ca_state */
