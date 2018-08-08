@@ -948,8 +948,14 @@ void tcp_skb_mark_lost_uncond_verify(struct tcp_sock *tp, struct sk_buff *skb)
 
 	tcp_sum_lost(tp, skb);
 	if (!(TCP_SKB_CB(skb)->sacked & (TCPCB_LOST|TCPCB_SACKED_ACKED))) {
+		struct sock *sk = (struct sock *)tp;
+		const struct tcp_congestion_ops *ca_ops;
+
 		tp->lost_out += tcp_skb_pcount(skb);
 		TCP_SKB_CB(skb)->sacked |= TCPCB_LOST;
+		ca_ops = inet_csk(sk)->icsk_ca_ops;
+		if (ca_ops->skb_marked_lost)
+			ca_ops->skb_marked_lost(sk, skb);
 	}
 }
 
