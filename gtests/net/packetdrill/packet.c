@@ -31,6 +31,7 @@
 #include "ethernet.h"
 #include "gre_packet.h"
 #include "ip_packet.h"
+#include "logging.h"
 #include "mpls_packet.h"
 
 
@@ -60,6 +61,25 @@ void packet_free(struct packet *packet)
 	free(packet->buffer);
 	memset(packet, 0, sizeof(*packet));  /* paranoia to help catch bugs */
 	free(packet);
+}
+
+struct packet_list *packet_list_new(void)
+{
+	struct packet_list *list = calloc(1, sizeof(struct packet_list));
+	list->packet = NULL;
+	list->next = NULL;
+	return list;
+}
+
+void packet_list_free(struct packet_list *list)
+{
+	while (list != NULL) {
+		struct packet_list *dead_list = list;
+		if (list->packet)
+			packet_free(list->packet);
+		list = list->next;
+		free(dead_list);
+	}
 }
 
 int packet_header_count(const struct packet *packet)
@@ -130,25 +150,15 @@ static void *offset_ptr(u8 *old_base, u8* new_base, void *old_ptr)
 	return (old == NULL) ? NULL : (new_base + (old - old_base));
 }
 
-/* Make a copy of the given old packet, but in the new copy reserve the
- * given number of bytes of headroom at the start of the packet->buffer.
- * This empty headroom can later be filled with outer packet headers.
- * A slow but simple model.
- */
-static struct packet *packet_copy_with_headroom(struct packet *old_packet,
-						int bytes_headroom)
+static void packet_duplicate_info(struct packet *packet,
+				  struct packet *old_packet,
+				  int bytes_headroom,
+				  int extra_payload)
 {
-	/* Allocate a new packet and copy link layer header and IP datagram. */
-	const int bytes_used = packet_end(old_packet) - old_packet->buffer;
-	assert(bytes_used >= 0);
-	assert(bytes_used <= 128*1024);
-	struct packet *packet = packet_new(bytes_headroom + bytes_used);
 	u8 *old_base = old_packet->buffer;
 	u8 *new_base = packet->buffer + bytes_headroom;
 
-	memcpy(new_base, old_base, bytes_used);
-
-	packet->ip_bytes	= old_packet->ip_bytes;
+	packet->ip_bytes	= old_packet->ip_bytes + extra_payload;
 	packet->direction	= old_packet->direction;
 	packet->time_usecs	= old_packet->time_usecs;
 	packet->flags		= old_packet->flags;
@@ -169,6 +179,27 @@ static struct packet *packet_copy_with_headroom(struct packet *old_packet,
 	packet->tcp_ts_ecr	= offset_ptr(old_base, new_base,
 					     old_packet->tcp_ts_ecr);
 	packet->echoed_header		= old_packet->echoed_header;
+}
+
+/* Make a copy of the given old packet, but in the new copy reserve the
+ * given number of bytes of headroom at the start of the packet->buffer.
+ * This empty headroom can later be filled with outer packet headers.
+ * A slow but simple model.
+ */
+static struct packet *packet_copy_with_headroom(struct packet *old_packet,
+						int bytes_headroom)
+{
+	/* Allocate a new packet and copy link layer header and IP datagram. */
+	const int bytes_used = packet_end(old_packet) - old_packet->buffer;
+	assert(bytes_used >= 0);
+	assert(bytes_used <= 128*1024);
+	struct packet *packet = packet_new(bytes_headroom + bytes_used);
+	u8 *old_base = old_packet->buffer;
+	u8 *new_base = packet->buffer + bytes_headroom;
+
+	memcpy(new_base, old_base, bytes_used);
+
+	packet_duplicate_info(packet, old_packet, bytes_headroom, 0);
 
 	return packet;
 }
@@ -234,4 +265,63 @@ struct header_type_info *header_type_info(enum header_t header_type)
 	assert(header_type < HEADER_NUM_TYPES);
 	assert(ARRAY_SIZE(header_types) == HEADER_NUM_TYPES);
 	return &header_types[header_type];
+}
+
+/* Aggregate a list of input packets into a single output packet. */
+struct packet *aggregate_packets(const struct packet_list *head,
+				 const struct packet_list *tail,
+				 int payload_size)
+{
+	int i;
+	/* Copy the headers from the last source packet. */
+	struct packet *first_packet = head->packet;
+	struct packet *last_packet = tail->packet;
+	struct packet *old_packet = last_packet;
+	/* Allocate a new packet that can accommodate the combined payload */
+	int extra_payload = payload_size - packet_payload_len(old_packet);
+	int headers_len = packet_payload(old_packet) - old_packet->buffer;
+	int old_packet_size = packet_end(old_packet) - old_packet->buffer;
+	struct packet *packet = packet_new(old_packet_size + extra_payload);
+
+	u8 *old_base = old_packet->buffer;
+	u8 *new_base = packet->buffer;
+	u8 *iter_base = new_base + headers_len;
+
+	DEBUGP("aggregate_packets with combined payload size of %d bytes\n",
+	       payload_size);
+	memcpy(new_base, old_base, headers_len);
+
+	/* Copy the payload from all the source packets. */
+	do {
+		memcpy(iter_base, packet_payload(head->packet),
+		       packet_payload_len(head->packet));
+		iter_base += packet_payload_len(head->packet);
+		head = head->next;
+	} while (head != NULL);
+
+	packet_duplicate_info(packet, old_packet, 0, extra_payload);
+
+	/* Adjust header bytes information to account for the larger payload. */
+	for (i = 0; i < ARRAY_SIZE(packet->headers); ++i) {
+		struct header *new_header = &packet->headers[i];
+
+		if (new_header->type == HEADER_NONE)
+			break;
+		new_header->total_bytes += extra_payload;
+		DEBUGP("%s header starts at %p\n",
+			header_type_info(new_header->type)->name,
+			new_header->h.ptr);
+		/* For TCP header, we must copy the seq number and the cwr flag
+		 * from the first packet.
+		 */
+		if (new_header->type == HEADER_TCP) {
+			assert(packet->tcp != NULL);
+			assert(first_packet->tcp != NULL);
+			packet->tcp->seq = first_packet->tcp->seq;
+			packet->tcp->cwr = first_packet->tcp->cwr;
+		}
+	}
+	packet_finish_encapsulation_headers(packet);
+
+	return packet;
 }

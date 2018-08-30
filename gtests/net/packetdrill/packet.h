@@ -112,6 +112,18 @@ struct packet {
 	int	mss;
 };
 
+/* A simple list of packets. */
+struct packet_list {
+	struct packet *packet;    /* the packet content */
+	struct packet_list *next; /* link to next element, or NULL if last */
+};
+
+/* Allocate a packet_list and initialize its fields to NULL. */
+extern struct packet_list *packet_list_new(void);
+
+/* Free an entire packet list. */
+extern void packet_list_free(struct packet_list *list);
+
 /* Allocate and initialize a packet. */
 extern struct packet *packet_new(u32 buffer_length);
 
@@ -137,6 +149,19 @@ extern struct header *packet_append_header(struct packet *packet,
  */
 extern struct packet *packet_encapsulate(struct packet *outer,
 					 struct packet *inner);
+
+/* Aggregate a list of packets into a new packet carrying the combined
+ * payload and return the newly allocated packet. The head and tail parameters
+ * point to the first and the last packet, respectively, in the input list.
+ * payload_size is the payload size for the aggregated packet, equal to the
+ * summed payload across all the packets in the list.
+ * The source packets were previously checked to have compatible headers. Copy
+ * the headers from the last source packet, and update the length fields in all
+ * the headers to match the combined payload.
+ */
+extern struct packet *aggregate_packets(const struct packet_list *head,
+					const struct packet_list *tail,
+					int payload_size);
 
 /* Encapsulate a packet and free the original outer and inner packets. */
 static inline struct packet *packet_encapsulate_and_free(struct packet *outer,
@@ -167,7 +192,7 @@ static inline int packet_address_family(const struct packet *packet)
 }
 
 /* Return a pointer to the first byte of the outermost IP header. */
-static inline u8 *packet_start(struct packet *packet)
+static inline u8 *packet_start(const struct packet *packet)
 {
 	u8 *start = packet->headers[0].h.ptr;
 	assert(start != NULL);
@@ -284,7 +309,7 @@ static inline void packet_set_tcp_ts_ecr(struct packet *packet, u32 ts_ecr)
 }
 
 /* Return a pointer to the TCP/UDP data payload. */
-static inline u8 *packet_payload(struct packet *packet)
+static inline u8 *packet_payload(const struct packet *packet)
 {
 	if (packet->tcp)
 		return ((u8 *) packet->tcp) + packet_tcp_header_len(packet);
@@ -300,13 +325,13 @@ static inline u8 *packet_payload(struct packet *packet)
 }
 
 /* Return a pointer to the byte beyond the end of the packet. */
-static inline u8 *packet_end(struct packet *packet)
+static inline u8 *packet_end(const struct packet *packet)
 {
 	return packet_start(packet) + packet->ip_bytes;
 }
 
 /* Return the length of the TCP/UDP payload. */
-static inline int packet_payload_len(struct packet *packet)
+static inline int packet_payload_len(const struct packet *packet)
 {
 	return packet_end(packet) - packet_payload(packet);
 }

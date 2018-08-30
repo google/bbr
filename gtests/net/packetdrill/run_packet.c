@@ -777,7 +777,7 @@ static int tcp_options_allowance(const struct packet *actual_packet,
 static int verify_ipv4(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	const struct ipv4 *actual_ipv4 = actual_packet->headers[layer].h.ipv4;
 	const struct ipv4 *script_ipv4 = script_packet->headers[layer].h.ipv4;
@@ -791,11 +791,11 @@ static int verify_ipv4(
 	    check_field("ipv4_header_length",
 			script_ipv4->ihl,
 			actual_ipv4->ihl, error) ||
-	    check_field("ipv4_total_length",
+	    (strict && check_field("ipv4_total_length",
 			(ntohs(script_ipv4->tot_len) +
 			 tcp_options_allowance(actual_packet,
 					       script_packet)),
-			ntohs(actual_ipv4->tot_len), error))
+			ntohs(actual_ipv4->tot_len), error)))
 		return STATUS_ERR;
 
 	if (verify_outbound_live_tos(script_packet->tos_chk,
@@ -816,7 +816,7 @@ static int verify_ipv4(
 static int verify_ipv6(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	const struct ipv6 *actual_ipv6 = actual_packet->headers[layer].h.ipv6;
 	const struct ipv6 *script_ipv6 = script_packet->headers[layer].h.ipv6;
@@ -824,11 +824,11 @@ static int verify_ipv6(
 	if (check_field("ipv6_version",
 			script_ipv6->version,
 			actual_ipv6->version, error) ||
-	    check_field("ipv6_payload_len",
+	    (strict && check_field("ipv6_payload_len",
 			(ntohs(script_ipv6->payload_len) +
 			 tcp_options_allowance(actual_packet,
 					       script_packet)),
-			ntohs(actual_ipv6->payload_len), error) ||
+			ntohs(actual_ipv6->payload_len), error)) ||
 	    check_field("ipv6_next_header",
 			script_ipv6->next_header,
 			actual_ipv6->next_header, error))
@@ -852,28 +852,29 @@ static int verify_ipv6(
 static int verify_tcp(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	const struct tcp *actual_tcp = actual_packet->headers[layer].h.tcp;
 	const struct tcp *script_tcp = script_packet->headers[layer].h.tcp;
+	int script_payload_len = packet_payload_len(script_packet);
 
 	if (check_field("tcp_data_offset",
 			(script_tcp->doff +
 			 tcp_options_allowance(actual_packet,
 					       script_packet)/sizeof(u32)),
 			actual_tcp->doff, error) ||
-	    check_field("tcp_fin",
+	    (strict && check_field("tcp_fin",
 			script_tcp->fin,
-			actual_tcp->fin, error) ||
+			actual_tcp->fin, error)) ||
 	    check_field("tcp_syn",
 			script_tcp->syn,
 			actual_tcp->syn, error) ||
 	    check_field("tcp_rst",
 			script_tcp->rst,
 			actual_tcp->rst, error) ||
-	    check_field("tcp_psh",
+	    (strict && check_field("tcp_psh",
 			script_tcp->psh,
-			actual_tcp->psh, error) ||
+			actual_tcp->psh, error)) ||
 	    check_field("tcp_ack",
 			script_tcp->ack,
 			actual_tcp->ack, error) ||
@@ -883,15 +884,18 @@ static int verify_tcp(
 	    check_field("tcp_ece",
 			script_tcp->ece,
 			actual_tcp->ece, error) ||
-	    check_field("tcp_cwr",
+	    (strict && check_field("tcp_cwr",
 			script_tcp->cwr,
-			actual_tcp->cwr, error) ||
+			actual_tcp->cwr, error)) ||
 	    check_field("tcp_reserved_bits",
 			script_tcp->res1,
 			actual_tcp->res1, error) ||
-	    check_field("tcp_seq",
+	    (strict && check_field("tcp_seq",
 			ntohl(script_tcp->seq),
-			ntohl(actual_tcp->seq), error) ||
+			ntohl(actual_tcp->seq), error)) ||
+	    (!strict && check_field("tcp_seq",
+			ntohl(script_tcp->seq) + script_payload_len,
+			ntohl(actual_tcp->seq), error)) ||
 	    check_field("tcp_ack_seq",
 			ntohl(script_tcp->ack_seq),
 			ntohl(actual_tcp->ack_seq), error) ||
@@ -911,12 +915,16 @@ static int verify_tcp(
 static int verify_udp(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	const struct udp *actual_udp = actual_packet->headers[layer].h.udp;
 	const struct udp *script_udp = script_packet->headers[layer].h.udp;
 
-	if (check_field("udp_len",
+	/* udp_len is either filled in by packetdrill or specified by user.
+	 * If strict is set, we should check udp_len
+	 */
+	if (strict &&
+	    check_field("udp_len",
 			ntohs(script_udp->len),
 			ntohs(actual_udp->len), error))
 		return STATUS_ERR;
@@ -927,7 +935,7 @@ static int verify_udp(
 static int verify_gre(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	const struct gre *actual_gre = actual_packet->headers[layer].h.gre;
 	const struct gre *script_gre = script_packet->headers[layer].h.gre;
@@ -978,7 +986,7 @@ static int verify_gre(
 static int verify_mpls(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	const struct header *actual_header = &actual_packet->headers[layer];
 	const struct header *script_header = &script_packet->headers[layer];
@@ -1008,7 +1016,7 @@ static int verify_mpls(
 static int verify_icmpv4(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	const struct icmpv4 *actual_icmpv4 = actual_packet->headers[layer].h.icmpv4;
 	const struct icmpv4 *script_icmpv4 = script_packet->headers[layer].h.icmpv4;
@@ -1028,7 +1036,7 @@ static int verify_icmpv4(
 static int verify_icmpv6(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	const struct icmpv6 *actual_icmpv6 = actual_packet->headers[layer].h.icmpv6;
 	const struct icmpv6 *script_icmpv6 = script_packet->headers[layer].h.icmpv6;
@@ -1047,13 +1055,13 @@ static int verify_icmpv6(
 typedef int (*verifier_func)(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error);
+	int layer, bool strict, char **error);
 
 /* Verify that required actual header fields are as the script expected. */
 static int verify_header(
 	const struct packet *actual_packet,
 	const struct packet *script_packet,
-	int layer, char **error)
+	int layer, bool strict, char **error)
 {
 	verifier_func verifiers[HEADER_NUM_TYPES] = {
 		[HEADER_IPV4]	= verify_ipv4,
@@ -1083,13 +1091,17 @@ static int verify_header(
 	assert(type < HEADER_NUM_TYPES);
 	verifier = verifiers[type];
 	assert(verifier != NULL);
-	return verifier(actual_packet, script_packet, layer, error);
+	return verifier(actual_packet, script_packet, layer, strict, error);
 }
 
-/* Verify that required actual header fields are as the script expected. */
+/* Verify that required actual header fields are as the script expected.
+ * This function has a secondary use. It is also used to verify compatibility
+ * between two consecutive packet fragments that are candidates for aggregation.
+ * The later mode is invoked with parameter 'strict' set to false.
+ */
 static int verify_outbound_live_headers(
 	const struct packet *actual_packet,
-	const struct packet *script_packet, char **error)
+	const struct packet *script_packet, bool strict, char **error)
 {
 	const int actual_headers = packet_header_count(actual_packet);
 	const int script_headers = packet_header_count(script_packet);
@@ -1100,8 +1112,9 @@ static int verify_outbound_live_headers(
 	       (actual_packet->icmpv4 != NULL) || (actual_packet->icmpv6 != NULL));
 
 	if (actual_headers != script_headers) {
-		asprintf(error, "live packet header layers: "
+		asprintf(error, "%s packet header layers: "
 			 "expected: %d headers vs actual: %d headers",
+			 (strict ? "live" : "aggregate candidate"),
 			 script_headers, actual_headers);
 		return STATUS_ERR;
 	}
@@ -1111,7 +1124,8 @@ static int verify_outbound_live_headers(
 		if (script_packet->headers[i].type == HEADER_NONE)
 			break;
 
-		if (verify_header(actual_packet, script_packet, i, error))
+		if (verify_header(actual_packet, script_packet, i, strict,
+				  error))
 			return STATUS_ERR;
 	}
 
@@ -1320,7 +1334,8 @@ static int verify_outbound_live_packet(
 		goto out;
 
 	/* Verify actual IP, TCP/UDP header values matched expected ones. */
-	if (verify_outbound_live_headers(actual_packet, script_packet, error)) {
+	if (verify_outbound_live_headers(actual_packet, script_packet, true,
+					 error)) {
 		non_fatal = true;
 		goto out;
 	}
@@ -1378,6 +1393,38 @@ out:
 		result = STATUS_WARN;
 	}
 	return result;
+}
+
+/* Check compatibility between two sequential packet fragments that are
+ * candidates for aggregation. Parameter current_payload represents the payload
+ * of the current fragment, while expected_payload repesents how much we need to
+ * match the script packet payload, and it is used to determine if this fragment
+ * is the last one.
+ */
+static int verify_packet_fragments(
+	const struct packet *current_fragment,
+	const struct packet *previous_fragment,
+	int current_payload, int expected_payload, char **error)
+{
+	/* Ensure that current fragment headers match the previous fragment
+	 * headers.
+	 */
+	if (verify_outbound_live_headers(current_fragment, previous_fragment,
+					 false, error))
+		return STATUS_ERR;
+
+	/* If this is not the last fragment, also check that its payload matches
+	 * the payload of the previous fragment.
+	 */
+	if (current_payload < expected_payload && current_payload !=
+			packet_payload_len(previous_fragment)) {
+		asprintf(error, "fragment payload: expected %d bytes vs "
+				"actual %d bytes",
+			 packet_payload_len(previous_fragment),
+			 current_payload);
+		return STATUS_ERR;
+	}
+	return STATUS_OK;
 }
 
 /* Sniff the next outbound live packet and return it. */
@@ -1498,6 +1545,11 @@ static int do_outbound_script_packet(
 	DEBUGP("do_outbound_script_packet\n");
 	int result = STATUS_ERR;		/* return value */
 	struct packet *live_packet = NULL;
+	struct packet_list *sniffed_packets_start = NULL; /* list head */
+	struct packet_list *sniffed_packets_end = NULL;   /* list tail */
+	int packet_count = 0;  /* number of sniffed packets */
+	int expected_payload_len = packet_payload_len(packet);
+	int sniffed_payload_len = 0;
 
 	if ((socket->state == SOCKET_PASSIVE_PACKET_RECEIVED) &&
 	    packet->tcp && packet->tcp->syn && packet->tcp->ack) {
@@ -1507,33 +1559,157 @@ static int do_outbound_script_packet(
 		       socket->script.local_isn);
 	}
 
-	/* Sniff outbound live packet and verify it's for the right socket. */
-	if (sniff_outbound_live_packet(state, socket, &live_packet, error))
+	DEBUGP("Expecting packet with payload %d bytes\n",
+	       expected_payload_len);
+	/* To allow remote mode execution of scripts that expect TSO or GSO
+	 * segmentation, this loop aggregates sequential outbound packets until
+	 * they reach the length expected by the script.
+	 * We explicitly disable aggregation in local mode, to facilitate
+	 * testing of certain features, such as automatic packet sizing, without
+	 * interferences from the packet aggregation algorithm.
+	 */
+	do {
+		struct packet_list *sniffed = NULL;
+		int live_payload = 0;
+
+		/* Sniff outbound live packet and verify it's for the right
+		 * socket.
+		 */
+		if (sniff_outbound_live_packet(state, socket, &live_packet,
+					       error))
+			goto out;
+		live_payload = packet_payload_len(live_packet);
+		DEBUGP("Sniffed packet with payload %d bytes\n", live_payload);
+
+		if ((socket->state == SOCKET_PASSIVE_PACKET_RECEIVED) &&
+		    packet->tcp && packet->tcp->syn && packet->tcp->ack) {
+			socket->state = SOCKET_PASSIVE_SYNACK_SENT;
+			socket->live.local_isn = ntohl(live_packet->tcp->seq);
+			DEBUGP("SYNACK live.local_isn: %u\n",
+			       socket->live.local_isn);
+		}
+
+		verbose_packet_dump(state, "outbound sniffed", live_packet,
+				    live_time_to_script_time_usecs(
+					    state, live_packet->time_usecs));
+
+		/* Save the TCP header so we can reset the connection at the
+		 * end.
+		 */
+		if (live_packet->tcp)
+			socket->last_outbound_tcp_header = *(live_packet->tcp);
+
+		sniffed = packet_list_new();
+		sniffed->packet = live_packet;
+		/* Reset live_packet so we can sniff the next packet if
+		 * needed.
+		 */
+		live_packet = NULL;
+		if (sniffed_packets_start == NULL) {
+			sniffed_packets_start = sniffed;
+		} else {
+			/* In remote mode, we do not see socket openings on the
+			 * server side. Sometimes, there are residual packets
+			 * sent over an old socket that packetdrill tests do not
+			 * explicitly account for. In local mode, such packets
+			 * are ignored because they don't match the test socket.
+			 * In remote mode, we sniff them because we do not know
+			 * any better. However, while we are trying to sniff
+			 * enough packets for the expected payload, we can check
+			 * if the source IPs/ports of the packets match. Discard
+			 * packets on a missmatch and start anew.
+			 * TODO(gmx): send syscall state from the wire_client to
+			 * the wire_server and get rid of this test.
+			 */
+			struct tuple old_packet_tuple, new_packet_tuple;
+			get_packet_tuple(sniffed_packets_end->packet,
+					 &old_packet_tuple);
+			get_packet_tuple(sniffed->packet, &new_packet_tuple);
+
+			if (!is_equal_tuple(&old_packet_tuple,
+					    &new_packet_tuple)) {
+				/* Discard old packets. */
+				DEBUGP("Discarding previously sniffed %d "
+				       "packets with total payload %d\n",
+				       packet_count, sniffed_payload_len);
+				packet_list_free(sniffed_packets_start);
+				packet_count = 0;
+				sniffed_payload_len = 0;
+				sniffed_packets_start = sniffed;
+			} else {
+				if (verify_packet_fragments(
+						sniffed->packet,
+						sniffed_packets_end->packet,
+						live_payload,
+						expected_payload_len -
+							sniffed_payload_len,
+						error)) {
+					packet_list_free(sniffed);
+					goto out;
+				}
+				sniffed_packets_end->next = sniffed;
+			}
+		}
+		sniffed_packets_end = sniffed;
+		packet_count++;
+		sniffed_payload_len += live_payload;
+	} while (sniffed_payload_len < expected_payload_len &&
+		 (!state->config->strict_segments ||
+		  state->config->is_wire_server));
+
+	/* Check that we matched the payload size. */
+	if (sniffed_payload_len != expected_payload_len) {
+		asprintf(error, "live packet payload: expected %d bytes vs "
+				"actual %d bytes",
+			 expected_payload_len, sniffed_payload_len);
 		goto out;
-
-	if ((socket->state == SOCKET_PASSIVE_PACKET_RECEIVED) &&
-	    packet->tcp && packet->tcp->syn && packet->tcp->ack) {
-		socket->state = SOCKET_PASSIVE_SYNACK_SENT;
-		socket->live.local_isn = ntohl(live_packet->tcp->seq);
-		DEBUGP("SYNACK live.local_isn: %u\n",
-		       socket->live.local_isn);
 	}
-
-	verbose_packet_dump(state, "outbound sniffed", live_packet,
-			    live_time_to_script_time_usecs(
-				    state, live_packet->time_usecs));
-
-	/* Save the TCP header so we can reset the connection at the end. */
-	if (live_packet->tcp)
-		socket->last_outbound_tcp_header = *(live_packet->tcp);
-
+	/* If we have just one packet, use it directly, no need to incur the
+	 * aggregation overhead.
+	 */
+	if (packet_count == 1) {
+		live_packet = sniffed_packets_start->packet;
+		sniffed_packets_start->packet = NULL;
+	} else {
+		if (DEBUG_LOGGING) {
+			char *debug = NULL;
+			add_packet_dump(&debug, "first",
+				sniffed_packets_start->packet,
+				live_time_to_script_time_usecs(state,
+				sniffed_packets_start->packet->time_usecs),
+				DUMP_FULL);
+			DEBUGP("%s\n", debug);
+			free(debug);
+			debug = NULL;
+			add_packet_dump(&debug, "last",
+				sniffed_packets_end->packet,
+				live_time_to_script_time_usecs(state,
+				sniffed_packets_end->packet->time_usecs),
+				DUMP_FULL);
+			DEBUGP("%s\n", debug);
+			free(debug);
+		}
+		live_packet = aggregate_packets(sniffed_packets_start,
+						sniffed_packets_end,
+						sniffed_payload_len);
+		if (DEBUG_LOGGING) {
+			char *debug = NULL;
+			add_packet_dump(&debug, "live", live_packet,
+				live_time_to_script_time_usecs(state,
+					live_packet->time_usecs),
+				DUMP_FULL);
+			DEBUGP("%s\n", debug);
+			free(debug);
+		}
+	}
 	/* Verify the bits the kernel sent were what the script expected. */
 	result = verify_outbound_live_packet(
-			state, socket, packet, live_packet, error);
+		state, socket, packet, live_packet, error);
 
 out:
 	if (live_packet != NULL)
 		packet_free(live_packet);
+	packet_list_free(sniffed_packets_start);
 	return result;
 }
 

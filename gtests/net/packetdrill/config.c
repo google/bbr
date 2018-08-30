@@ -60,6 +60,7 @@ enum option_codes {
 	OPT_SO_FLAGS,
 	OPT_TCP_TS_ECR_SCALED,
 	OPT_TCP_TS_TICK_USECS,
+	OPT_STRICT_SEGMENTS,
 	OPT_NON_FATAL,
 	OPT_DRY_RUN,
 	OPT_IS_ANYIP,
@@ -95,6 +96,7 @@ struct option options[] = {
 	{ "so_flags",		.has_arg = true,  NULL, OPT_SO_FLAGS },
 	{ "tcp_ts_ecr_scaled",	.has_arg = false, NULL, OPT_TCP_TS_ECR_SCALED },
 	{ "tcp_ts_tick_usecs",	.has_arg = true,  NULL, OPT_TCP_TS_TICK_USECS },
+	{ "strict_segments",	.has_arg = false, NULL, OPT_STRICT_SEGMENTS },
 	{ "non_fatal",		.has_arg = true,  NULL, OPT_NON_FATAL },
 	{ "dry_run",		.has_arg = false, NULL, OPT_DRY_RUN },
 	{ "is_anyip",		.has_arg = false, NULL, OPT_IS_ANYIP },
@@ -124,6 +126,7 @@ void show_usage(void)
 		"\t[--tolerance_usecs=tolerance_usecs]\n"
 		"\t[--tcp_ts_ecr_scaled]\n"
 		"\t[--tcp_ts_tick_usecs=<microseconds per TCP TS val tick>]\n"
+		"\t[--strict_segments]\n"
 		"\t[--non_fatal=<comma separated types: packet,syscall>]\n"
 		"\t[--wire_client]\n"
 		"\t[--wire_server]\n"
@@ -457,6 +460,9 @@ static void process_option(int opt, char *optarg, struct config *config,
 		if (config->tcp_ts_tick_usecs < 0 ||
 		    config->tcp_ts_tick_usecs > 1000000)
 			die("%s: bad --tcp_ts_tick_usecs: %s\n", where, optarg);
+		break;
+	case OPT_STRICT_SEGMENTS:
+		config->strict_segments = true;
 		break;
 	case OPT_WIRE_CLIENT:
 		config->is_wire_client = true;

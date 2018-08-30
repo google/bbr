@@ -123,6 +123,8 @@ struct config {
 	int mss;			/* gso_size for GRO packets to tun device */
 	int mtu;			/* MTU of tun device */
 
+	bool strict_segments;		/* check exact segmentation? */
+
 	bool non_fatal_packet;		/* treat packet asserts as non-fatal */
 	bool non_fatal_syscall;		/* treat syscall asserts as non-fatal */
 	bool send_omit_free;		/* do not call free() */
