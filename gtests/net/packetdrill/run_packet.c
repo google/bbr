@@ -1411,7 +1411,7 @@ static int verify_outbound_live_packet(
 	DEBUGP("packet time_usecs: %lld\n", live_packet->time_usecs);
 	if (verify_time(state, time_type, script_usecs,
 				script_usecs_end, live_packet->time_usecs,
-				state->last_event,
+				last_event_time_usecs(state),
 				"outbound packet", error)) {
 		non_fatal = true;
 		goto out;

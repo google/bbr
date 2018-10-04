@@ -3521,13 +3521,18 @@ static void *system_call_thread(void *arg)
 			 */
 			invoke_system_call(state, event, syscall);
 
-			/* Check end time for the blocking system call. */
+			/* Check end time for the blocking system call.
+			 * For a blocking system call we compute the
+			 * dynamic tolerance based on the start and end
+			 * time. The last event here is unpredictable
+			 * and irrelevant.
+			 */
 			assert(state->syscalls->live_end_usecs >= 0);
 			if (verify_time(state,
 						event->time_type,
 						syscall->end_usecs, 0,
 						state->syscalls->live_end_usecs,
-						state->last_event,
+						event->time_usecs,
 						"system call return", &error)) {
 				die("%s:%d: %s\n",
 				    state->config->script_path,

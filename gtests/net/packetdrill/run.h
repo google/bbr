@@ -154,6 +154,13 @@ static inline s64 live_time_to_script_time_usecs(struct state *state,
 	return script_time_usecs;
 }
 
+/* Get the time of the last event if exists, or NO_TIME_RANGE. */
+static inline s64 last_event_time_usecs(struct state *state)
+{
+	return state->last_event == NULL ? NO_TIME_RANGE :
+			state->last_event->time_usecs;
+}
+
 /*
  * See if something that happened at the given actual live wall time
  * in microseconds happened reasonably close to the time at which we
@@ -167,7 +174,7 @@ static inline s64 live_time_to_script_time_usecs(struct state *state,
  */
 extern int verify_time(struct state *state, enum event_time_t time_type,
 		       s64 script_usecs, s64 script_usecs_end,
-		       s64 live_usecs, struct event *last_event,
+		       s64 live_usecs, s64 last_event_usecs,
 		       const char *description, char **error);
 extern void check_event_time(struct state *state, s64 live_usecs);
 
