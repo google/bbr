@@ -51,5 +51,12 @@ And get output like the following:
 
 
 ```
-  bbr wscale:8,7 rto:216 rtt:15.924/4.256 ato:40 mss:1348 pmtu:1500 rcvmss:1208 advmss:1428 cwnd:16 bytes_acked:3744 bytes_received:8845 segs_out:15 segs_in:16 data_segs_out:6 data_segs_in:13 bbr:(bw:2.0Mbps,mrtt:14.451,pacing_gain:2.88672,cwnd_gain:2.88672) send 10.8Mbps lastsnd:8208 lastrcv:8188 lastack:8188 pacing_rate 22.7Mbps delivery_rate 2.0Mbps app_limited busy:68ms rcv_rtt:18.349 rcv_space:28800 rcv_ssthresh:46964 minrtt:14.451
+  bbr wscale:8,7 rto:216 rtt:15.924/4.256 ato:40 mss:1348 pmtu:1500
+  rcvmss:1208 advmss:1428 cwnd:16 bytes_acked:3744 bytes_received:8845
+  segs_out:15 segs_in:16 data_segs_out:6 data_segs_in:13
+  bbr:(bw:2.0Mbps,mrtt:14.451,pacing_gain:2.88672,cwnd_gain:2.88672)
+  send 10.8Mbps lastsnd:8208 lastrcv:8188 lastack:8188
+  pacing_rate 22.7Mbps delivery_rate 2.0Mbps app_limited
+  busy:68ms rcv_rtt:18.349 rcv_space:28800 rcv_ssthresh:46964
+  minrtt:14.451
 ```
