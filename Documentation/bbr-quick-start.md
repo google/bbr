@@ -163,3 +163,5 @@ CONFIG_DEFAULT_BBR=y
 If you want to create your own .config, then just remember to include those two
 lines, and follow the
 [kernel/image requirements for GCE](https://cloud.google.com/compute/docs/tutorials/building-images).
+
+If you have questions about BBR, check the [BBR FAQ](https://github.com/google/bbr/blob/master/Documentation/bbr-faq.md).
