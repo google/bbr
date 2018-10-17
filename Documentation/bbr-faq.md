@@ -1,6 +1,7 @@
 # BBR FAQ
 
-Here are some frequently asked questions about BBR congestion control.
+Here are some frequently asked questions about BBR congestion control,
+including Linux TCP BBR and QUIC BBR.
 
 ## Where can I discuss BBR?
 
