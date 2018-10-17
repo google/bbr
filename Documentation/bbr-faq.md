@@ -17,9 +17,29 @@ mailing list home page:
   https://groups.google.com/d/forum/bbr-dev
 
 
+## Where can I find the source code for Linux TCP BBR?
+
+For Linux TCP BBR:
+
+- The latest code:
+  - https://git.kernel.org/pub/scm/linux/kernel/git/davem/net-next.git/tree/net/ipv4/tcp_bbr.c
+- The list of commits:
+  -  https://git.kernel.org/pub/scm/linux/kernel/git/davem/net-next.git/log/net/ipv4/tcp_bbr.c
+
 ## How can I try out Linux TCP BBR?
 
 Check out [TCP BBR Quick-Start: Building and Running TCP BBR on Google Compute Engine](https://github.com/google/bbr/blob/master/Documentation/bbr-quick-start.md).
+
+## How can I visualize the behavior of Linux TCP BBR connections?
+
+Check out [tcptrace](http://www.tcptrace.org/) and
+[xplot.org](http://www.xplot.org/). To install these tools on Ubuntu or Debian
+you can use:
+
+```
+sudo apt-get install xplot-xplot.org
+sudo apt-get install tcptrace
+```
 
 ## How can I monitor Linux TCP BBR connections?
 
@@ -60,3 +80,16 @@ And get output like the following:
   busy:68ms rcv_rtt:18.349 rcv_space:28800 rcv_ssthresh:46964
   minrtt:14.451
 ```
+
+
+## Where can I find the source code for QUIC BBR?
+
+For QUIC BBR:
+
+- The latest code:
+  - https://cs.chromium.org/chromium/src/net/third_party/quic/core/congestion_control/bbr_sender.cc
+  - https://cs.chromium.org/chromium/src/net/third_party/quic/core/congestion_control/bbr_sender.h
+
+## How can I visualize the behavior of QUIC connections?
+
+Check out [quic-trace](https://github.com/google/quic-trace).
