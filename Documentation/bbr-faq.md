@@ -33,14 +33,17 @@ Check out [TCP BBR Quick-Start: Building and Running TCP BBR on Google Compute E
 
 ## How can I visualize the behavior of Linux TCP BBR connections?
 
-Check out [tcptrace](http://www.tcptrace.org/) and
+Check out [tcpdump](http://www.tcpdump.org/),
+[tcptrace](http://www.tcptrace.org/), and
 [xplot.org](http://www.xplot.org/). To install these tools on Ubuntu or Debian
 you can use:
 
 ```
-sudo apt-get install xplot-xplot.org
-sudo apt-get install tcptrace
+sudo apt-get install tcpdump tcptrace xplot-xplot.org
 ```
+
+For an intro to this tool chain, see
+[this slide deck](https://fasterdata.es.net/assets/Uploads/20131016-TCPDumpTracePlot.pdf).
 
 ## How can I monitor Linux TCP BBR connections?
 
