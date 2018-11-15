@@ -138,6 +138,7 @@ struct int_symbol platform_symbols_table[] = {
 	{ _TCP_NLA_BYTES_RETRANS,            "TCP_NLA_BYTES_RETRANS"          },
 	{ _TCP_NLA_DSACK_DUPS,               "TCP_NLA_DSACK_DUPS"             },
 	{ _TCP_NLA_REORD_SEEN,               "TCP_NLA_REORD_SEEN"             },
+	{ _TCP_NLA_SRTT,                    "TCP_NLA_SRTT"                    },
 
 	{ _TCP_CA_Open,			    "TCP_CA_OPEN"		      },
 	{ _TCP_CA_Disorder,		    "TCP_CA_DISORDER"		      },

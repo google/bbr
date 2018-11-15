@@ -525,6 +525,7 @@ struct nla_type_info tcp_nla[] = {
 	[_TCP_NLA_BYTES_RETRANS] = {"TCP_NLA_BYTES_RETRANS", sizeof(u64)},
 	[_TCP_NLA_DSACK_DUPS] = {"TCP_NLA_DSACK_DUPS", sizeof(u32)},
 	[_TCP_NLA_REORD_SEEN] = {"TCP_NLA_REORD_SEEN", sizeof(u32)},
+	[_TCP_NLA_SRTT] = {"TCP_NLA_SRTT", sizeof(u32)},
 };
 
 /* Allocate and fill a msg_control described by the given expression.
@@ -788,6 +789,7 @@ static bool scm_opt_stats_expect_eq(struct state *state,
 		case _TCP_NLA_DELIVERED_CE:
 		case _TCP_NLA_DSACK_DUPS:
 		case _TCP_NLA_REORD_SEEN:
+		case _TCP_NLA_SRTT:
 			ev_u32 = *(u32 *) ((void *) enla + NLA_HDRLEN);
 			av_u32 = *(u32 *) ((void *) anla + NLA_HDRLEN);
 			if (ev_u32 == av_u32 ||
