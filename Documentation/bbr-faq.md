@@ -45,6 +45,17 @@ sudo apt-get install tcpdump tcptrace xplot-xplot.org
 For an intro to this tool chain, see
 [this slide deck](https://fasterdata.es.net/assets/Uploads/20131016-TCPDumpTracePlot.pdf).
 
+An example session might look like:
+```
+# start capturing a trace:
+tcpdump -w ./trace.pcap -s 120 -c 100000000 port $PORT &
+# run test....
+# turn trace into plot files:
+tcptrace -S -zx -zy *pcap
+# visualize each connection:
+for f in `ls *xpl`; do echo $f ... ; xplot.org $f ; done
+```
+
 ## How can I monitor Linux TCP BBR connections?
 
 You can see output that includes BBR state variables, including pacing rate,
