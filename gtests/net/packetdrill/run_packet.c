@@ -1472,6 +1472,47 @@ static int verify_packet_fragments(
 	return STATUS_OK;
 }
 
+static void dump_one_sniffed_packet(struct state *state,
+				    struct packet *sniffed_packet,
+				    int packet_index,
+				    char **error)
+{
+	s64 actual_usecs = live_time_to_script_time_usecs(
+		state, sniffed_packet->time_usecs);
+	char *packet_desc;
+
+	asprintf(&packet_desc, "actual #%d", packet_index);
+	add_packet_dump(error, packet_desc, sniffed_packet, actual_usecs,
+			DUMP_SHORT);
+	free(packet_desc);
+}
+
+/* Write a human-readable message for cases where a sequence of sniffed packets
+ * does not match an expected TSO/GSO jumbogram.
+ */
+static void dump_packet_fragment_mismatch(
+	struct state *state,
+	struct packet_list *sniffed_packets_start,
+	struct packet *sniffed_packet_latest,
+	struct packet *script_packet,
+	char **error)
+{
+	struct packet_list *sniffed_iter = NULL;
+	int packet_index = 0;
+
+	add_packet_dump(error, "   script", script_packet,
+			state->event->time_usecs, DUMP_SHORT);
+
+	for (sniffed_iter = sniffed_packets_start; sniffed_iter != NULL;
+	     sniffed_iter = sniffed_iter->next) {
+		dump_one_sniffed_packet(state, sniffed_iter->packet,
+					packet_index, error);
+		packet_index++;
+	}
+	dump_one_sniffed_packet(state, sniffed_packet_latest,
+				packet_index, error);
+}
+
 /* Sniff the next outbound live packet and return it. */
 static int sniff_outbound_live_packet(
 	struct state *state, struct socket *expected_socket,
@@ -1693,6 +1734,12 @@ static int do_outbound_script_packet(
 						sniffed_payload_len,
 						expected_payload_len,
 						error)) {
+					dump_packet_fragment_mismatch(
+						state,
+						sniffed_packets_start,
+						sniffed->packet,
+						packet,
+						error);
 					packet_list_free(sniffed);
 					goto out;
 				}
