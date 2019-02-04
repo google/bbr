@@ -108,3 +108,13 @@ For QUIC BBR:
 ## How can I visualize the behavior of QUIC connections?
 
 Check out [quic-trace](https://github.com/google/quic-trace).
+
+## Where does the value of the BBR STARTUP pacing_gain come from?
+
+In a nutshell, the BBR STARTUP pacing gain is derived to be the lowest gain that
+will allow the pacing rate to double each round trip, when the pacing rate is
+computed as a multiple of the maximum recent delivery rate seen.
+
+Here is a detailed derivation, along with some graphs to illustrate:
+
+- https://github.com/google/bbr/blob/master/Documentation/startup/gain/analysis/bbr_startup_gain.pdf
