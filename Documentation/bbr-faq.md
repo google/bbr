@@ -102,8 +102,8 @@ And get output like the following:
 For QUIC BBR:
 
 - The latest code:
-  - https://cs.chromium.org/chromium/src/net/third_party/quic/core/congestion_control/bbr_sender.cc
-  - https://cs.chromium.org/chromium/src/net/third_party/quic/core/congestion_control/bbr_sender.h
+  - https://cs.chromium.org/chromium/src/net/third_party/quiche/src/quic/core/congestion_control/bbr_sender.cc
+  - https://cs.chromium.org/chromium/src/net/third_party/quiche/src/quic/core/congestion_control/bbr_sender.h
 
 ## How can I visualize the behavior of QUIC connections?
 
