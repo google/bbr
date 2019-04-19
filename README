@@ -12,8 +12,8 @@ respective repositories for the projects where it is used:
 
 - For QUIC BBR:
   - The latest code:
-    https://cs.chromium.org/chromium/src/net/third_party/quic/core/congestion_control/bbr_sender.cc
-    https://cs.chromium.org/chromium/src/net/third_party/quic/core/congestion_control/bbr_sender.h
+    https://cs.chromium.org/chromium/src/net/third_party/quiche/src/quic/core/congestion_control/bbr_sender.cc
+    https://cs.chromium.org/chromium/src/net/third_party/quiche/src/quic/core/congestion_control/bbr_sender.h
 
 Test results, performance evaluations, feedback, and BBR-related
 discussions are very welcome in the public e-mail list for BBR:
