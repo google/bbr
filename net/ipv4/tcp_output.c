@@ -1593,7 +1593,7 @@ int tcp_fragment(struct sock *sk, enum tcp_queue tcp_queue,
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct sk_buff *buff;
-	int old_factor;
+	int old_factor, inflight_prev;
 	long limit;
 	int nlen;
 	u8 flags;
@@ -1668,6 +1668,30 @@ int tcp_fragment(struct sock *sk, enum tcp_queue tcp_queue,
 
 		if (diff)
 			tcp_adjust_pcount(sk, skb, diff);
+
+		inflight_prev = TCP_SKB_CB(skb)->tx.in_flight - old_factor;
+		if (inflight_prev < 0) {
+			WARN_ONCE(tcp_skb_tx_in_flight_is_suspicious(
+					  old_factor,
+					  TCP_SKB_CB(skb)->sacked,
+					  TCP_SKB_CB(skb)->tx.in_flight),
+				  "inconsistent: tx.in_flight: %u "
+				  "old_factor: %d mss: %u sacked: %u "
+				  "1st pcount: %d 2nd pcount: %d "
+				  "1st len: %u 2nd len: %u ",
+				  TCP_SKB_CB(skb)->tx.in_flight, old_factor,
+				  mss_now, TCP_SKB_CB(skb)->sacked,
+				  tcp_skb_pcount(skb), tcp_skb_pcount(buff),
+				  skb->len, buff->len);
+			inflight_prev = 0;
+		}
+		/* Set 1st tx.in_flight as if 1st were sent by itself: */
+		TCP_SKB_CB(skb)->tx.in_flight = inflight_prev +
+						 tcp_skb_pcount(skb);
+		/* Set 2nd tx.in_flight with new 1st and 2nd pcounts: */
+		TCP_SKB_CB(buff)->tx.in_flight = inflight_prev +
+						 tcp_skb_pcount(skb) +
+						 tcp_skb_pcount(buff);
 	}
 
 	/* Link BUFF into the send queue. */
