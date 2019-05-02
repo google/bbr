@@ -1196,6 +1196,21 @@ static inline bool tcp_skb_sent_after(u64 t1, u64 t2, u32 seq1, u32 seq2)
 	return t1 > t2 || (t1 == t2 && after(seq1, seq2));
 }
 
+/* If a retransmit failed due to local qdisc congestion or other local issues,
+ * then we may have called tcp_set_skb_tso_segs() to increase the number of
+ * segments in the skb without increasing the tx.in_flight. In all other cases,
+ * the tx.in_flight should be at least as big as the pcount of the sk_buff.  We
+ * do not have the state to know whether a retransmit failed due to local qdisc
+ * congestion or other local issues, so to avoid spurious warnings we consider
+ * that any skb marked lost may have suffered that fate.
+ */
+static inline bool tcp_skb_tx_in_flight_is_suspicious(u32 skb_pcount,
+						      u32 skb_sacked_flags,
+						      u32 tx_in_flight)
+{
+	return (skb_pcount > tx_in_flight) && !(skb_sacked_flags & TCPCB_LOST);
+}
+
 /* These functions determine how the current flow behaves in respect of SACK
  * handling. SACK is negotiated with the peer, and therefore it can vary
  * between different flows.
