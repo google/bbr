@@ -2475,7 +2475,7 @@ struct tcp_plb_state {
 	u8	consec_cong_rounds:5, /* consecutive congested rounds */
 		unused:3;
 	u32	pause_until; /* jiffies32 when PLB can resume rerouting */
-};
+} __attribute__ ((__packed__));
 
 static inline void tcp_plb_init(const struct sock *sk,
 				struct tcp_plb_state *plb)
