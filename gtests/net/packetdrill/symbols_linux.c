@@ -192,6 +192,7 @@ struct int_symbol platform_symbols_table[] = {
 	{ TCP_INQ,			    "TCP_INQ"			      },
 
 	{ TCP_CM_INQ,			    "TCP_CM_INQ"		      },
+	{ TCP_TX_DELAY,			    "TCP_TX_DELAY"		      },
 
 	{ O_RDONLY,                         "O_RDONLY"                        },
 	{ O_WRONLY,                         "O_WRONLY"                        },

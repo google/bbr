@@ -67,6 +67,8 @@
 #define TCP_CM_INQ		 TCP_INQ
 #endif
 
+#define TCP_TX_DELAY		 37
+
 /* TODO: remove these when netinet/tcp.h has them */
 #ifndef TCPI_OPT_ECN_SEEN
 #define TCPI_OPT_ECN_SEEN	16 /* received at least one packet with ECT */
