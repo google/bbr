@@ -10,7 +10,7 @@ and help evaluate/improve the BBR v2 algorithm and code. We welcome
 patches with good solutions to issues.
 
 This document shows how to download, build, install, and test
-a Linux kernel running TCP BBR v2 alpha on Google Compute Engine.
+a Linux kernel running TCP BBR v2 alpha.
 
 ## License
 
@@ -30,7 +30,8 @@ There are two main options for downloading the code:
 you can run:
 
 ```
-git clone https://github.com/google/bbr.git
+git clone -o google-bbr -b v2alpha  https://github.com/google/bbr.git
+cd bbr/
 ```
 
 2. To download the code into an existing git repo, you can use:
@@ -131,6 +132,8 @@ cd /root/nsperf
 tests=random_loss ./run_tests.sh
 tests=random_loss ./graph_tests.sh
 ```
+
+Enjoy!
 
 ## FAQ
 
