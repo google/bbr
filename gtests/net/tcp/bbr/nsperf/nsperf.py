@@ -464,7 +464,7 @@ def run_test(params):
     if params['pcap'] > 0:
         snaplen = params['pcap']
         path = os.path.join(outdir, 'out.pcap')
-        run('ip netns exec srv tcpdump -i srv.r -s %(snaplen)s -w %(path)s &' %
+        run('ip netns exec srv tcpdump -i srv.r -s %(snaplen)d -w %(path)s &' %
             {'path': path, 'snaplen': snaplen})
 
     # Set up periodic sender-side 'ss' stat capture.
