@@ -23,7 +23,6 @@ Let's start by declaring some shell variables relating to your GCE environment:
 ```
 typeset -x PROJECT="make-tcp-fast"    # A GCE project name
 typeset -x ZONE="us-west1-a"          # A GCE Zone
-
 ```
 
 Next, we can create a VM to build the kernel with BBR. This will create a
@@ -41,14 +40,12 @@ gcloud compute \
   --image "/ubuntu-os-cloud/ubuntu-1604-xenial-v20160922" \
   --boot-disk-size "20" \
   --scopes default="https://www.googleapis.com/auth/devstorage.read_only","https://www.googleapis.com/auth/logging.write","https://www.googleapis.com/auth/monitoring.write","https://www.googleapis.com/auth/servicecontrol","https://www.googleapis.com/auth/service.management.readonly"
-
 ```
 After creating the instance; log in:
 
 
 ```
 gcloud compute ssh --project ${PROJECT} --zone ${ZONE} bbrtest1
-
 ```
 
 Then, on your GCE instance, use apt(8) to install the packages necessary to
