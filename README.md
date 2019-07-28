@@ -135,6 +135,24 @@ tests=random_loss ./graph_tests.sh
 
 Enjoy!
 
+## Release Notes and Details
+
+### Enabling ECN support
+
+For lab testing, researchers can enable BBRv2 ECN support with the following
+commands. This is for use when you know that any ECN marks that the connections
+experience will be DCTCP/L4S-style ECN marks, rather than RFC3168 ECN marks:
+```
+# negotiate TCP ECN for active and passive connections:
+sysctl net.ipv4.tcp_ecn=1
+# enable BBRv2 ECN response:
+echo 1 > /sys/module/tcp_bbr2/parameters/ecn_enable
+# enable BBRv2 ECN response at any RTT:
+echo 0 > /sys/module/tcp_bbr2/parameters/ecn_max_rtt_us
+```
+Production use of the BBRv2 ECN functionality depends on negotiation or
+configuration that is outside the scope of the BBRv2 alpha release.
+
 ## FAQ
 
 If you have questions about BBR, check the [BBR FAQ](https://github.com/google/bbr/blob/master/Documentation/bbr-faq.md).
