@@ -59,7 +59,7 @@ you can use the following script, included in the TCP BBR v2 distribution:
 
 ## Checking the kernel installation
 
-Once the target test machine has finished rebooting, then ssh to the targert
+Once the target test machine has finished rebooting, then ssh to the target
 test machine and become root with sudo or equivalent. First check that the
 machine booted the kernel you built above:
 
