@@ -1,0 +1,47 @@
+// Verify behavior for the sequence:
+// shutdown(SHUT_RD), receive, send, shutdown(SHUT_WR), close().
+
+`../common/defaults.sh`
+
+// Initialize a server socket.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 8>
+   +0 < . 1:1(0) ack 1 win 257
+
+   +0 accept(3, ..., ...) = 4
+
+ +.01 shutdown(4, SHUT_RD) = 0
+
+   +0 read(4, ..., 1000) = 0
+
+// You would think that after SHUT_RD we would respond to incoming
+// data with a RST and not queue the data for reading, but we actually
+// ACK the data, enqueue it for reading, and can read() the data.
+// AFAICT in 2003 Andi Kleen seems to have decided that this case is too
+// obscure to slow down the fast path for receiving and reading data:
+//   http://marc.info/?l=linux-netdev&m=105774722214242&w=2
+// So....
+// Verify that receiving and reading still works.
+   +0 < . 1:1001(1000) ack 1 win 257
+   +0 > . 1:1(0) ack 1001
+   +0 read(4, ..., 1000) = 1000
+
+// Verify that writing and sending still works.
+ +.01 write(4, ..., 1000) = 1000
+   +0 > P. 1:1001(1000) ack 1001
+   +0 < . 1001:1001(0) ack 1001 win 257
+
+ +.01 shutdown(4, SHUT_WR) = 0
+   +0 > F. 1001:1001(0) ack 1001
+   +0 < .  1001:1001(0) ack 1002 win 257
+   +0 write(4, ..., 1000) = -1 EPIPE (Broken pipe)
+
+ +.01 close(4) = 0
+
+ +.01 < F. 1001:1001(0) ack 1002 win 257
+   +0 > .  1002:1002(0) ack 1002

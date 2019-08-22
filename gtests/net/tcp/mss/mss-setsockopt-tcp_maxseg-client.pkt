@@ -1,0 +1,25 @@
+// Test TCP_MAXSEG works on active/client TCP connections.
+
+`../common/defaults.sh`
+
+// Create a socket.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+
+// Set MSS to 1100.
+ +.01 setsockopt(3, SOL_TCP, TCP_MAXSEG, [1100], 4) = 0
+ +.01 getsockopt(3, SOL_TCP, TCP_MAXSEG, [536], [4]) = 0
+
+ +.08...0.180 connect(3, ..., ...) = 0
+
+// Establish a connection with an outgoing advertised MSS of 1100.
+   +0 > S 0:0(0) <mss 1100,sackOK,TS val 100 ecr 0,nop,wscale 8>
+  +.1 < S. 0:0(0) ack 1 win 32792 <mss 1460,nop,wscale 7>
+   +0 > . 1:1(0) ack 1
+
+  +.1 getsockopt(3, SOL_TCP, TCP_MAXSEG, [1100], [4]) = 0
+
+  +.1 %{ assert tcpi_advmss == 1100, tcpi_advmss; assert tcpi_snd_mss == 1100, tcpi_snd_mss }%
+
+// IW10 MSS should yield outgoing TSO packet with 10*1100 == 11000 bytes:
+  +.1 write(3, ..., 12000) = 12000
+   +0 > . 1:11001(11000) ack 1

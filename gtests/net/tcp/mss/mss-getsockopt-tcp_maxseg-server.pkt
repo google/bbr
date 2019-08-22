@@ -1,0 +1,19 @@
+// Test that getsockopt of TCP_MAXSEG works on passive/server TCP connections.
+// In this variant we test that a simple query of segment size works.
+
+`../common/defaults.sh`
+
+// Set up a listening socket.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+// Establish a connection
+  +.1 < S 0:0(0) win 32792 <mss 1100,nop,wscale 8>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,wscale 8>
+  +.1 < . 1:1(0) ack 1 win 257
+
+  +.1 accept(3, ..., ...) = 4
+
+  +.1 getsockopt(4, SOL_TCP, TCP_MAXSEG, [1100], [4]) = 0
