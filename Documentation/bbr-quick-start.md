@@ -61,12 +61,16 @@ sudo apt-get upgrade
 ## Obtain kernel sources with TCP BBR
 
 TCP BBR is in Linux v4.9 and beyond. However, we recommend compiling from the
-latest sources, from the networking development branch. In particular, in the
-`davem/net-next` networking development branch (and Linux v4.13-rc1 and
-beyond) there is new support for 
+latest sources, from the networking development branch. In particular, the
+`davem/net-next` networking development branch (and Linux v4.20 and beyond)
+support
 [TCP-level pacing](https://git.kernel.org/pub/scm/linux/kernel/git/davem/net-next.git/commit/?id=218af599fa635b107cfe10acf3249c4dfe5e4123).
-This means that there is no longer a requirement to install the "fq" qdisc to
-use BBR. Any qdisc will do.
+This means that there is no longer a strict requirement to install the "fq"
+qdisc to use BBR. Any qdisc will work, though "fq" performs better for
+highly-loaded servers. (Note that TCP-level pacing was added in v4.13-rc1 but
+did not work well for BBR until a
+[fix](https://git.kernel.org/pub/scm/linux/kernel/git/davem/net-next.git/commit/?id=cadefe5f584abaac40dce72009e4de738cbff467)
+was added in 4.20.)
 
 For this guide, we'll grab the Linux networking development branch
 `davem/net-next` from `git.kernel.org`.
