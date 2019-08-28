@@ -1,0 +1,24 @@
+--mss=1000
+
+`../common/defaults.sh`
+
+// Establish a connection.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1100,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 8>
+   +0 < . 1:1(0) ack 1 win 320
+   +0 accept(3, ..., ...) = 4
+
+// Receive 10000 bytes, but as a GRO packet, with 10 segments
+// Note that even if the SYN packet announced mss 1100,
+// packetdrill is asked to cook gso_size=1000 packets
+   +0 < . 1:10001(10000) win 320
+   +0 > . 1:1(0) ack 10001
+
+// Check the max segment size ever received is 1000
+   +0 %{ assert tcpi_rcv_mss == 1000, tcpi_rcv_mss }%
+

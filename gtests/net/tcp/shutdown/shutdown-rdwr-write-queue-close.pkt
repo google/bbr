@@ -1,0 +1,43 @@
+// Verify behavior for the sequence:
+// write(), [non-empty write queue], shutdown(SHUT_RDWR), close().
+// In this variant we verify behavior when there is still
+// sent but unacknowledged data in the write queue at the time of
+// the shutdown().
+
+`../common/defaults.sh`
+
+// Initialize a server socket.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 8>
+ +.01 < . 1:1(0) ack 1 win 257
+
+   +0 accept(3, ..., ...) = 4
+
+ +.01 write(4, ..., 10000) = 10000
+   +0 > P. 1:10001(10000) ack 1
+
+ +.01 shutdown(4, SHUT_RDWR) = 0
+   +0 > F. 10001:10001(0) ack 1
+
+   +0 read(4, ..., 1000) = 0
+   +0 write(4, ..., 1000) = -1 EPIPE (Broken pipe)
+
+ +.01 close(4) = 0
+
+// Verify that after the close() the connection is still around because we
+// have data to get to the other side....
+
+// TLP at 2*RTT after the original send of FIN.
+ +.01~+.015 > F. 10001:10001(0) ack 1
+
+// Receve an ACK for the remaining outstanding data.
+ +.01 < . 1:1(0) ack 10002 win 257
+
+// Receive a FIN.
+ +.01 < F. 1:1(0) ack 10002 win 257
+   +0 > . 10002:10002(0) ack 2

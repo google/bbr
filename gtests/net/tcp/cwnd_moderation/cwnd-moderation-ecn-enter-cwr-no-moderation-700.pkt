@@ -1,0 +1,33 @@
+// Test that if we don't moderate cwnd when ECN sees congestion and reduces cwnd.
+
+`../common/defaults.sh
+sysctl -q net.ipv4.tcp_ecn=2    # server agrees to ECN if client proposes it
+`
+
+// Establish a connection.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+  +.1 < SEW 0:0(0) win 32792 <mss 1000,nop,nop,sackOK,nop,wscale 7>
+   +0 > SE. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 8>
+  +.1 < [ect1] . 1:1(0) ack 1 win 320
+   +0 accept(3, ..., ...) = 4
+
+// Send 4 data segments.
+   +0 write(4, ..., 4000) = 4000
+   +0 > P. 1:4001(4000) ack 1
++.005 %{ assert tcpi_snd_cwnd == 10, tcpi_snd_cwnd }%
+
++.095 < [noecn] E. 1:1(0) ack 1001 win 320
++.005 %{
+assert tcpi_ca_state == TCP_CA_CWR, tcpi_ca_state
+
+# Since "tcp: use PRR to reduce cwin in CWR state" in Linux 3.7,
+# we use PRR for CWR.
+# Here, since we have 3 packets in flight and ssthresh is 7,
+# we do PRR-CRB and sndcnt = min(3, 1) = 2,
+# so cwnd = 3 + 1 = 4.
+assert tcpi_snd_cwnd == 4, tcpi_snd_cwnd
+}%

@@ -30,7 +30,7 @@
 #include <sys/time.h>
 #include "packet.h"
 
-#define MSGHDR_MAX_CONTROLLEN 1000	/* arbitrary maximum cmsg length */
+#define MSGHDR_MAX_CONTROLLEN 2000	/* arbitrary maximum cmsg length */
 
 /* The types of expressions in a script */
 enum expression_t {

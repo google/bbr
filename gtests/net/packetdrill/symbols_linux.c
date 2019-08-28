@@ -131,12 +131,22 @@ struct int_symbol platform_symbols_table[] = {
 	{ _TCP_NLA_DELIVERY_RATE_APP_LMT,   "TCP_NLA_DELIVERY_RATE_APP_LMT"   },
 	{ _TCP_NLA_SNDQ_SIZE,               "TCP_NLA_SNDQ_SIZE"               },
 	{ _TCP_NLA_CA_STATE,		    "TCP_NLA_CA_STATE"		      },
+	{ _TCP_NLA_SND_SSTHRESH,   	    "TCP_NLA_SND_SSTHRESH"	      },
+	{ _TCP_NLA_DELIVERED,		    "TCP_NLA_DELIVERED"               },
+	{ _TCP_NLA_DELIVERED_CE,            "TCP_NLA_DELIVERED_CE"            },
+	{ _TCP_NLA_BYTES_SENT,               "TCP_NLA_BYTES_SENT"             },
+	{ _TCP_NLA_BYTES_RETRANS,            "TCP_NLA_BYTES_RETRANS"          },
+	{ _TCP_NLA_DSACK_DUPS,               "TCP_NLA_DSACK_DUPS"             },
+	{ _TCP_NLA_REORD_SEEN,               "TCP_NLA_REORD_SEEN"             },
+	{ _TCP_NLA_SRTT,                    "TCP_NLA_SRTT"                    },
 
 	{ _TCP_CA_Open,			    "TCP_CA_OPEN"		      },
 	{ _TCP_CA_Disorder,		    "TCP_CA_DISORDER"		      },
 	{ _TCP_CA_CWR,			    "TCP_CA_CWR"		      },
 	{ _TCP_CA_Recovery,		    "TCP_CA_RECOVERY"		      },
 	{ _TCP_CA_Loss,			    "TCP_CA_LOSS"		      },
+
+	{ TCP_INFINITE_SSTHRESH,            "TCP_INFINITE_SSTHRESH"           },
 
 	{ IP_TOS,                           "IP_TOS"                          },
 	{ IP_MTU_DISCOVER,                  "IP_MTU_DISCOVER"                 },
@@ -179,6 +189,9 @@ struct int_symbol platform_symbols_table[] = {
 	{ TCP_FASTOPEN_CONNECT,             "TCP_FASTOPEN_CONNECT"            },
 	{ TCP_TIMESTAMP,                    "TCP_TIMESTAMP"                   },
 	{ TCP_NOTSENT_LOWAT,                "TCP_NOTSENT_LOWAT"               },
+	{ TCP_INQ,			    "TCP_INQ"			      },
+
+	{ TCP_CM_INQ,			    "TCP_CM_INQ"		      },
 
 	{ O_RDONLY,                         "O_RDONLY"                        },
 	{ O_WRONLY,                         "O_WRONLY"                        },

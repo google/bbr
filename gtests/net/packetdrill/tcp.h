@@ -62,6 +62,11 @@
 #define TCP_REPAIR_WINDOW        29  /* Get/set window parameters */
 #define TCP_FASTOPEN_CONNECT     30  /* Attempt FastOpen with connect */
 
+#ifndef TCP_INQ
+#define TCP_INQ			 36
+#define TCP_CM_INQ		 TCP_INQ
+#endif
+
 /* TODO: remove these when netinet/tcp.h has them */
 #ifndef TCPI_OPT_ECN_SEEN
 #define TCPI_OPT_ECN_SEEN	16 /* received at least one packet with ECT */
@@ -198,6 +203,14 @@ struct _tcp_info {
 	__u64	tcpi_busy_time;      /* Time (usec) busy sending data */
 	__u64	tcpi_rwnd_limited;   /* Time (usec) limited by receive window */
 	__u64	tcpi_sndbuf_limited; /* Time (usec) limited by send buffer */
+
+	__u32	tcpi_delivered;
+	__u32	tcpi_delivered_ce;
+
+	__u64	tcpi_bytes_sent;     /* RFC4898 tcpEStatsPerfHCDataOctetsOut */
+	__u64	tcpi_bytes_retrans;  /* RFC4898 tcpEStatsPerfOctetsRetrans */
+	__u32	tcpi_dsack_dups;     /* RFC4898 tcpEStatsStackDSACKDups */
+	__u32	tcpi_reord_seen;     /* reordering events seen */
 };
 
 /* netlink attributes types for SCM_TIMESTAMPING_OPT_STATS */
@@ -217,6 +230,14 @@ enum {
 	_TCP_NLA_DELIVERY_RATE_APP_LMT, /* delivery rate application limited ? */
 	_TCP_NLA_SNDQ_SIZE,      /* Data pending in send queue */
 	_TCP_NLA_CA_STATE,       /* ca_state of socket */
+	_TCP_NLA_SND_SSTHRESH,   /* Slow start size threshold */
+	_TCP_NLA_DELIVERED,      /* Data pkts delivered incl. out-of-order */
+	_TCP_NLA_DELIVERED_CE,   /* Like above but only ones w/ CE marks */
+	_TCP_NLA_BYTES_SENT,	/* Data bytes sent including retransmission */
+	_TCP_NLA_BYTES_RETRANS,	/* Data bytes retransmitted */
+	_TCP_NLA_DSACK_DUPS,	/* DSACK blocks received */
+	_TCP_NLA_REORD_SEEN,	/* reordering events seen */
+	_TCP_NLA_SRTT,		/* smoothed RTT in usecs */
 };
 
 /* TCP ca_state */
@@ -227,6 +248,8 @@ enum {
 	_TCP_CA_Recovery,
 	_TCP_CA_Loss,
 };
+
+#define TCP_INFINITE_SSTHRESH	0x7fffffff
 
 enum {
 	_SK_MEMINFO_RMEM_ALLOC,

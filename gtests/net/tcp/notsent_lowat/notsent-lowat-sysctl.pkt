@@ -1,0 +1,46 @@
+// Test that poll reports POLLOUT only if number of unsent bytes is
+// below net.ipv4.tcp_notsent_lowat sysctl.
+
+// Then ask for POLLOUT when unsent data falls below 4000.
+`../../common/defaults.sh
+sysctl -q net.ipv4.tcp_notsent_lowat=4000`
+
+// Initialize connection
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+   +0 < S 0:0(0) win 32792 <mss 1000,sackOK,nop,nop,nop,wscale 7>
+   +0 > S. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 8>
+ +.01 < . 1:1(0) ack 1 win 257
+
+   +0 accept(3, ..., ...) = 4
+
+// Verify that the socket option is separate from the sysctl.
+   +0 getsockopt(4, SOL_TCP, TCP_NOTSENT_LOWAT, [0], [4]) = 0
+
+   +0 fcntl(4, F_SETFL, O_RDWR|O_NONBLOCK) = 0
+
+   +0 write(4, ..., 59000) = 26000
+   +0 > . 1:10001(10000) ack 1
+
+// Verify that we get a POLLOUT at the right time.
+   +0...0.040 poll([{fd=4,
+             events=POLLOUT,
+             revents=POLLOUT}], 1, 1000) = 1
+
+ +.01 < . 1:1(0) ack 2001 win 257
+   +0 > . 10001:14001(4000) ack 1
+
+ +.01 < . 1:1(0) ack 4001 win 257
+   +0 > . 14001:18001(4000) ack 1
+
+ +.01 < . 1:1(0) ack 6001 win 257
+   +0 > . 18001:22001(4000) ack 1
+
+ +.01 < . 1:1(0) ack 8001 win 257
+   +0 > P. 22001:26001(4000) ack 1
+// The amount of unsent data is now below 2000, so poll() wakes up.
+
+ +.01 < . 1:1(0) ack 9001 win 257
