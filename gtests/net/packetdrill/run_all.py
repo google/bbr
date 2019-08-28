@@ -85,9 +85,11 @@ class TestSet(object):
     """Run every test in tests in all three variants (v4, v6, v4-mapped-v6)."""
     procs = []
     for test in tests:
-      procs.append(self.StartTestIPv4(test))
-      procs.append(self.StartTestIPv6(test))
-      procs.append(self.StartTestIPv4Mappedv6(test))
+      if not test.endswith('v6.pkt'):
+        procs.append(self.StartTestIPv4(test))
+        procs.append(self.StartTestIPv4Mappedv6(test))
+      if not test.endswith('v4.pkt'):
+        procs.append(self.StartTestIPv6(test))
 
     return procs
 
