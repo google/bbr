@@ -146,7 +146,7 @@ struct bbr {
 	u32	undo_inflight_hi;    /* inflight_hi before latest losses */
 	u32	bw_latest;	 /* max delivered bw in last round trip */
 	u32	bw_lo;		 /* lower bound on sending bandwidth */
-	u32	bw_hi[2];	 /* upper bound of sending bandwidth range*/
+	u32	max_bw[2];	 /* max recent measured bw sample */
 	u32	inflight_latest; /* max delivered data in last round trip */
 	u32	inflight_lo;	 /* lower bound of inflight data range */
 	u32	inflight_hi;	 /* upper bound of inflight data range */
@@ -446,7 +446,7 @@ static u32 bbr_max_bw(const struct sock *sk)
 {
 	struct bbr *bbr = inet_csk_ca(sk);
 
-	return max(bbr->bw_hi[0], bbr->bw_hi[1]);
+	return max(bbr->max_bw[0], bbr->max_bw[1]);
 }
 
 /* Return the estimated bandwidth of the path, in pkts/uS << BW_SCALE. */
@@ -1322,22 +1322,22 @@ static u32 bbr_sndbuf_expand(struct sock *sk)
  */
 
 /* Incorporate a new bw sample into the current window of our max filter. */
-static void bbr2_take_bw_hi_sample(struct sock *sk, u32 bw)
+static void bbr2_take_max_bw_sample(struct sock *sk, u32 bw)
 {
 	struct bbr *bbr = inet_csk_ca(sk);
 
-	bbr->bw_hi[1] = max(bw, bbr->bw_hi[1]);
+	bbr->max_bw[1] = max(bw, bbr->max_bw[1]);
 }
 
 /* Keep max of last 1-2 cycles. Each PROBE_BW cycle, flip filter window. */
-static void bbr2_advance_bw_hi_filter(struct sock *sk)
+static void bbr2_advance_max_bw_filter(struct sock *sk)
 {
 	struct bbr *bbr = inet_csk_ca(sk);
 
-	if (!bbr->bw_hi[1])
+	if (!bbr->max_bw[1])
 		return;  /* no samples in this window; remember old window */
-	bbr->bw_hi[0] = bbr->bw_hi[1];
-	bbr->bw_hi[1] = 0;
+	bbr->max_bw[0] = bbr->max_bw[1];
+	bbr->max_bw[1] = 0;
 }
 
 /* How much do we want in flight? Our BDP, unless congestion cut cwnd. */
@@ -1719,7 +1719,7 @@ static void bbr2_update_congestion_signals(
 	bw = ctx->sample_bw;
 
 	if (!rs->is_app_limited || bw >= bbr_max_bw(sk))
-		bbr2_take_bw_hi_sample(sk, bw);
+		bbr2_take_max_bw_sample(sk, bw);
 
 	bbr->loss_in_round |= (rs->losses > 0);
 
@@ -1922,7 +1922,7 @@ static bool bbr2_adapt_upper_bounds(struct sock *sk,
 		 * samples from the previous cycle, by advancing the window.
 		 */
 		if (bbr->mode == BBR_PROBE_BW && !rs->is_app_limited)
-			bbr2_advance_bw_hi_filter(sk);
+			bbr2_advance_max_bw_filter(sk);
 		/* If we had an inflight_hi, then probed and pushed inflight all
 		 * the way up to hit that inflight_hi without seeing any
 		 * high loss/ECN in all the resulting ACKs from that probing,
@@ -2472,8 +2472,8 @@ static void bbr2_init(struct sock *sk)
 	bbr->startup_ecn_rounds = 0;
 	bbr2_reset_congestion_signals(sk);
 	bbr->bw_lo = ~0U;
-	bbr->bw_hi[0] = 0;
-	bbr->bw_hi[1] = 0;
+	bbr->max_bw[0] = 0;
+	bbr->max_bw[1] = 0;
 	bbr->inflight_lo = ~0U;
 	bbr->inflight_hi = ~0U;
 	bbr->bw_probe_up_cnt = ~0U;
