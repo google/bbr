@@ -1503,7 +1503,7 @@ static bool bbr2_is_inflight_too_high(const struct sock *sk,
 	    bbr->ecn_eligible && bbr->params.ecn_thresh) {
 		ecn_thresh = (u64)rs->delivered * bbr->params.ecn_thresh >>
 				BBR_SCALE;
-		if (rs->delivered_ce >= ecn_thresh)
+		if (rs->delivered_ce > ecn_thresh)
 			return true;
 	}
 
