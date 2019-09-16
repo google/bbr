@@ -183,7 +183,7 @@ struct bbr {
 			full_bw_cnt:3,		/* max allowed value: 7 */
 			bw_rtts:5,		/* max allowed value: 31 */
 			cwnd_tso_budget:1,	/* allowed values: {0, 1} */
-			unused3:1,
+			ecn_reprobe_swiftly:1,	/* boolean */
 			drain_to_target:1,	/* boolean */
 			precise_ece_ack:1,	/* boolean */
 			extra_acked_in_startup:1, /* allowed values: {0, 1} */
@@ -2001,7 +2001,8 @@ static bool bbr2_adapt_upper_bounds(struct sock *sk,
 }
 
 /* Check if it's time to probe for bandwidth now, and if so, kick it off. */
-static bool bbr2_check_time_to_probe_bw(struct sock *sk)
+static bool bbr2_check_time_to_probe_bw(struct sock *sk,
+					const struct rate_sample *rs)
 {
 	struct bbr *bbr = inet_csk_ca(sk);
 	u32 n;
@@ -2022,6 +2023,21 @@ static bool bbr2_check_time_to_probe_bw(struct sock *sk)
 		n = ilog2((((u64)bbr->inflight_hi *
 			    bbr->params.ecn_reprobe_gain) >> BBR_SCALE));
 		bbr2_start_bw_probe_refill(sk, n);
+		return true;
+	}
+
+	/* If we seem to be at an operating point where we are not seeing loss
+	 * but we are seeing ECN marks, then when we see an ACK without an ECN
+	 * mark we reprobe quickly but with a normal BBRv2 curve, starting
+	 * additive and growing exponentially after that. Why? in case a burst
+	 * of cross-traffic has ceased and freed up bw, or in case we are a
+	 * low-rate flow that needs to probe quickly to grow toward the fair
+	 * share.
+	 */
+	if (bbr->params.ecn_reprobe_swiftly && bbr->ecn_eligible &&
+	    bbr->ecn_in_cycle && !bbr->loss_in_cycle && !rs->is_ece) {
+		bbr->debug.event = 'S';  /* *S*wiftly reprobe. */
+		bbr2_start_bw_probe_refill(sk, 0);
 		return true;
 	}
 
@@ -2080,7 +2096,7 @@ static void bbr2_update_cycle_phase(struct sock *sk,
 	 * by slowing down.
 	 */
 	case BBR_BW_PROBE_CRUISE:
-		if (bbr2_check_time_to_probe_bw(sk))
+		if (bbr2_check_time_to_probe_bw(sk, rs))
 			return;		/* already decided state transition */
 		break;
 
@@ -2148,7 +2164,7 @@ static void bbr2_update_cycle_phase(struct sock *sk,
 	 * the queue is drained; persisting would underutilize the pipe.
 	 */
 	case BBR_BW_PROBE_DOWN:
-		if (bbr2_check_time_to_probe_bw(sk))
+		if (bbr2_check_time_to_probe_bw(sk, rs))
 			return;		/* already decided state transition */
 		if (bbr2_check_time_to_cruise(sk, inflight, bw))
 			bbr2_start_bw_probe_cruise(sk);
@@ -2374,6 +2390,11 @@ static u32 bbr_ecn_max_rtt_us = 5000;
  */
 static u32 bbr_ecn_reprobe_gain;
 
+/* If true, if in a cycle with no losses but some ECN marks, after any
+ * non-ECN ACK, immediately start regular probing.
+ */
+static bool bbr_ecn_reprobe_swiftly = true;	/* default: enabled */
+
 /* Should we react to ECN by cutting bw_lo rate as well as inflight_lo? */
 static bool bbr_ecn_bw_lo = true;	/* default: enabled */
 
@@ -2450,6 +2471,7 @@ module_param_named(ecn_factor,           bbr_ecn_factor,           uint, 0644);
 module_param_named(ecn_thresh,           bbr_ecn_thresh,           uint, 0644);
 module_param_named(ecn_max_rtt_us,       bbr_ecn_max_rtt_us,       uint, 0644);
 module_param_named(ecn_reprobe_gain,     bbr_ecn_reprobe_gain,     uint, 0644);
+module_param_named(ecn_reprobe_swiftly,  bbr_ecn_reprobe_swiftly,  bool, 0644);
 module_param_named(ecn_bw_lo,            bbr_ecn_bw_lo,            bool, 0644);
 module_param_named(ecn_bw_hi,            bbr_ecn_bw_hi,            bool, 0644);
 module_param_named(loss_thresh,          bbr_loss_thresh,          uint, 0664);
@@ -2482,6 +2504,7 @@ static void bbr2_init(struct sock *sk)
 	bbr->params.ecn_thresh = min_t(u32, 0xFFU, bbr_ecn_thresh);
 	bbr->params.ecn_max_rtt_us = min_t(u32, 0x7ffffU, bbr_ecn_max_rtt_us);
 	bbr->params.ecn_reprobe_gain = min_t(u32, 0x1FF, bbr_ecn_reprobe_gain);
+	bbr->params.ecn_reprobe_swiftly = bbr_ecn_reprobe_swiftly ? 1 : 0;
 	bbr->params.ecn_bw_lo = bbr_ecn_bw_lo ? 1 : 0;
 	bbr->params.ecn_bw_hi = bbr_ecn_bw_hi ? 1 : 0;
 	bbr->params.loss_thresh = min_t(u32, 0xFFU, bbr_loss_thresh);
