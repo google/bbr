@@ -192,7 +192,7 @@ struct bbr {
 			startup_cwnd_gain:11,	/* max allowed value: 2047 */
 			bw_probe_pif_gain:9,	/* max allowed value: 511 */
 			usage_based_cwnd:1, 	/* boolean */
-			unused2:1;
+			ecn_reprobe_additive:1; /* boolean */
 		u16	probe_rtt_win_ms:14,	/* max allowed value: 16383 */
 			refill_add_inc:2;	/* max allowed value: 3 */
 		u16	extra_acked_gain:11,	/* max allowed value: 2047 */
@@ -2006,6 +2006,7 @@ static bool bbr2_check_time_to_probe_bw(struct sock *sk,
 {
 	struct bbr *bbr = inet_csk_ca(sk);
 	u32 n;
+	u64 bw;
 
 	/* If we seem to be at an operating point where we are not seeing loss
 	 * but we are seeing ECN marks, then when the ECN marks cease we reprobe
@@ -2028,15 +2029,30 @@ static bool bbr2_check_time_to_probe_bw(struct sock *sk,
 
 	/* If we seem to be at an operating point where we are not seeing loss
 	 * but we are seeing ECN marks, then when we see an ACK without an ECN
-	 * mark we reprobe quickly but with a normal BBRv2 curve, starting
-	 * additive and growing exponentially after that. Why? in case a burst
-	 * of cross-traffic has ceased and freed up bw, or in case we are a
+	 * mark we reprobe quickly, starting with an additive increase and then
+	 * normal exponential curve after that. Why? in case a burst of
+	 * cross-traffic has ceased and freed up bw, or in case we are a
 	 * low-rate flow that needs to probe quickly to grow toward the fair
 	 * share.
+	 * TODO(ncardwell): for increased fairness and robustness, we may want
+	 * to use this approach any time we start bandwidth probing; not just
+	 * in cases where bandwidth probing is triggered by ECN->no-ECN
+	 * transitions.
 	 */
 	if (bbr->params.ecn_reprobe_swiftly && bbr->ecn_eligible &&
 	    bbr->ecn_in_cycle && !bbr->loss_in_cycle && !rs->is_ece) {
 		bbr->debug.event = 'S';  /* *S*wiftly reprobe. */
+		if (bbr->params.ecn_reprobe_additive) {
+			/* Give an additive "universal basic income". */
+			if (bbr->inflight_hi != ~0U)
+				bbr->inflight_hi++; /* inflight_hi += MSS */
+			if (bbr->bw_hi != ~0U && bbr->min_rtt_us) {
+				/* bw_hi += MSS / min_rtt */
+				bw = (u64)1 * BW_UNIT;
+				do_div(bw, bbr->min_rtt_us);
+				bbr->bw_hi += bw;
+			}
+		}
 		bbr2_start_bw_probe_refill(sk, 0);
 		return true;
 	}
@@ -2395,6 +2411,11 @@ static u32 bbr_ecn_reprobe_gain;
  */
 static bool bbr_ecn_reprobe_swiftly = true;	/* default: enabled */
 
+/* If true, when doing ecn_reprobe_swiftly, make an additive increase to
+ * bw_hi and inflight_hi, to push for fairness.
+ */
+static bool bbr_ecn_reprobe_additive = true;	/* default: enabled */
+
 /* Should we react to ECN by cutting bw_lo rate as well as inflight_lo? */
 static bool bbr_ecn_bw_lo = true;	/* default: enabled */
 
@@ -2472,6 +2493,7 @@ module_param_named(ecn_thresh,           bbr_ecn_thresh,           uint, 0644);
 module_param_named(ecn_max_rtt_us,       bbr_ecn_max_rtt_us,       uint, 0644);
 module_param_named(ecn_reprobe_gain,     bbr_ecn_reprobe_gain,     uint, 0644);
 module_param_named(ecn_reprobe_swiftly,  bbr_ecn_reprobe_swiftly,  bool, 0644);
+module_param_named(ecn_reprobe_additive, bbr_ecn_reprobe_additive, bool, 0644);
 module_param_named(ecn_bw_lo,            bbr_ecn_bw_lo,            bool, 0644);
 module_param_named(ecn_bw_hi,            bbr_ecn_bw_hi,            bool, 0644);
 module_param_named(loss_thresh,          bbr_loss_thresh,          uint, 0664);
@@ -2505,6 +2527,7 @@ static void bbr2_init(struct sock *sk)
 	bbr->params.ecn_max_rtt_us = min_t(u32, 0x7ffffU, bbr_ecn_max_rtt_us);
 	bbr->params.ecn_reprobe_gain = min_t(u32, 0x1FF, bbr_ecn_reprobe_gain);
 	bbr->params.ecn_reprobe_swiftly = bbr_ecn_reprobe_swiftly ? 1 : 0;
+	bbr->params.ecn_reprobe_additive = bbr_ecn_reprobe_additive ? 1 : 0;
 	bbr->params.ecn_bw_lo = bbr_ecn_bw_lo ? 1 : 0;
 	bbr->params.ecn_bw_hi = bbr_ecn_bw_hi ? 1 : 0;
 	bbr->params.loss_thresh = min_t(u32, 0xFFU, bbr_loss_thresh);
