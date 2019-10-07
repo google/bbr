@@ -23,6 +23,12 @@ Then build the tool:
 
 #  make
 
+To build packetdrill with CMake:
+
+# mkdir build
+# cd build
+# cmake ..
+# make
 
 running
 =======
