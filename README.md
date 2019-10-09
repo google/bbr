@@ -10,5 +10,35 @@ Links:
 * [packetdrill USENIX ATC paper from June 2013](http://research.google.com/pubs/pub41316.html) describing the tool and our team's experiences
 * [packetdrill USENIX ;login: article](http://research.google.com/pubs/pub41848.html) from October 2013
 * [packetdrill mailing list](https://groups.google.com/forum/#!forum/packetdrill) for questions, discussions and patches
-* [submitting patches for packetdrill](https://code.google.com/archive/p/packetdrill/wikis/SubmittingPatches.wiki)
 * [packetdrill language syntax reference](https://code.google.com/archive/p/packetdrill/wikis/Syntax.wiki)
+
+# How To Submit a Patch for packetdrill
+
+We welcome patches with bug fixes or new features for packetdrill. The packetdrill project uses git for source code management. Please follow the following steps when sending in a patch for packetdrill:
+
+1. join the packetdrill e-mail list, so your e-mails to the list will be accepted by Google groups
+2. edit some files, compile, test
+3. git commit your change with a message like:
+ 
+ ```
+packetdrill: add amazing feature foo
+
+This commit adds amazing feature foo, which ...
+
+Tested on FooOS and BarOS by doing the following:
+  ...
+
+Signed-off-by: John Doe <john.doe@gmail.com>
+```
+
+4. Generate git patches using: `git format-patch HEAD~1`
+5. Check style for the patches by running `checkpatch.pl` from the Linux source tree, e.g.:
+```
+wget http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/scripts/checkpatch.pl
+chmod u+x checkpatch.pl
+./checkpatch.pl --no-tree --ignore FSF_MAILING_ADDRESS 00*.patch
+```
+6. You can submit your patch as either a GitHub pull request or an e-mail patch series, with something like:
+```
+git send-email --to packetdrill@googlegroups.com 00*.patch
+```
