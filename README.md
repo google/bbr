@@ -18,7 +18,8 @@ We welcome patches with bug fixes or new features for packetdrill. The packetdri
 
 1. join the packetdrill e-mail list, so your e-mails to the list will be accepted by Google groups
 2. edit some files, compile, test
-3. git commit your change with a message like:
+3. verify that you can certify the origin of this code with a `Signed-off-by` footer, according to the [standards of the Linux open source project](https://www.kernel.org/doc/html/v4.17/process/submitting-patches.html#developer-s-certificate-of-origin-1-1)
+4. git commit your change with a message like:
  
  ```
 packetdrill: add amazing feature foo
@@ -31,14 +32,14 @@ Tested on FooOS and BarOS by doing the following:
 Signed-off-by: John Doe <john.doe@gmail.com>
 ```
 
-4. Generate git patches using: `git format-patch HEAD~1`
-5. Check style for the patches by running `checkpatch.pl` from the Linux source tree, e.g.:
+5. Generate git patches using: `git format-patch HEAD~1`
+6. Check style for the patches by running `checkpatch.pl` from the Linux source tree, e.g.:
 ```
 wget http://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/plain/scripts/checkpatch.pl
 chmod u+x checkpatch.pl
 ./checkpatch.pl --no-tree --ignore FSF_MAILING_ADDRESS 00*.patch
 ```
-6. You can submit your patch as either a GitHub pull request or an e-mail patch series, with something like:
+7. You can submit your patch as either a GitHub pull request or an e-mail patch series, with something like:
 ```
 git send-email --to packetdrill@googlegroups.com 00*.patch
 ```
