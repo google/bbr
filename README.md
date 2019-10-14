@@ -10,7 +10,7 @@ Links:
 * [packetdrill USENIX ATC paper from June 2013](http://research.google.com/pubs/pub41316.html) describing the tool and our team's experiences
 * [packetdrill USENIX ;login: article](http://research.google.com/pubs/pub41848.html) from October 2013
 * [packetdrill mailing list](https://groups.google.com/forum/#!forum/packetdrill) for questions, discussions and patches
-* [packetdrill language syntax reference](https://code.google.com/archive/p/packetdrill/wikis/Syntax.wiki)
+* [packetdrill language syntax reference](syntax.wiki)
 
 External links:
 * [using packetdrill for teaching TCP](http://beta.computer-networking.info/syllabus/default/exercises/tcp-2.html)
