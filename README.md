@@ -12,6 +12,9 @@ Links:
 * [packetdrill mailing list](https://groups.google.com/forum/#!forum/packetdrill) for questions, discussions and patches
 * [packetdrill language syntax reference](https://code.google.com/archive/p/packetdrill/wikis/Syntax.wiki)
 
+External links:
+* [using packetdrill for teaching TCP](http://beta.computer-networking.info/syllabus/default/exercises/tcp-2.html)
+
 # How To Submit a Patch for packetdrill
 
 We welcome patches with bug fixes or new features for packetdrill. The packetdrill project uses git for source code management. Please follow the following steps when sending in a patch for packetdrill:
