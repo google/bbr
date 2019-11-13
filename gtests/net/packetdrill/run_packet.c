@@ -26,6 +26,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -404,10 +405,13 @@ static int find_tcp_timestamp(struct packet *packet, char **error)
 	for (option = tcp_options_begin(packet, &iter); option != NULL;
 	     option = tcp_options_next(&iter, error))
 		if (option->kind == TCPOPT_TIMESTAMP) {
-			packet->tcp_ts_val =
-				(void *)&(option->data.time_stamp.val);
-			packet->tcp_ts_ecr =
-				(void *)&(option->data.time_stamp.ecr);
+			const size_t val_off = offsetof(struct tcp_option,
+							data.time_stamp.val);
+			const size_t ecr_off = offsetof(struct tcp_option,
+							data.time_stamp.ecr);
+
+			packet->tcp_ts_val = (void *)((char *)option + val_off);
+			packet->tcp_ts_ecr = (void *)((char *)option + ecr_off);
 		}
 	return *error ? STATUS_ERR : STATUS_OK;
 }
