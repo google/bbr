@@ -224,7 +224,8 @@ struct tcp_sock {
 	u8	chrono_type : 2,	/* current chronograph type */
 		repair      : 1,
 		is_sack_reneg:1,    /* in recovery from loss with SACK reneg? */
-		is_cwnd_limited:1;/* forward progress limited by snd_cwnd? */
+		is_cwnd_limited:1,  /* forward progress limited by snd_cwnd? */
+		fast_ack_mode:1;    /* use fast ack mode? */
 	__cacheline_group_end(tcp_sock_read_txrx);
 
 	/* RX read-mostly hotpath cache lines */
