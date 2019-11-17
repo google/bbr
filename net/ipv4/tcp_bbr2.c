@@ -2385,7 +2385,7 @@ static u32 bbr_ecn_alpha_init = BBR_UNIT;	/* 1.0, to respond quickly */
 /* On ECN, cut inflight_lo to (1 - ecn_factor * ecn_alpha) scaled by BBR_SCALE.
  * No ECN based bounding when 0. Max allwed value is 255.
  */
-static u32 bbr_ecn_factor = BBR_UNIT * 1 / 3;	    /* 1/3 = 33% */
+static u32 bbr_ecn_factor = BBR_UNIT * 1 / 2;	    /* 1/2 = 50% */
 
 /* Estimate bw probing has gone too far if CE ratio exceeds this threshold.
  * Scaled by BBR_SCALE. Disabled when 0. Max allowed is 255.
