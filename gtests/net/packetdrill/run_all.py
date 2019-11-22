@@ -26,6 +26,8 @@ class TestSet(object):
 
   def FindTests(self, path='.'):
     """Return all *.pkt files in a given directory and its subdirectories."""
+    if os.path.isfile(path):
+      return [path]
     tests = []
     for dirpath, _, filenames in os.walk(path):
       for filename in fnmatch.filter(filenames, '*.pkt'):
@@ -81,7 +83,7 @@ class TestSet(object):
          '-D CMSG_TYPE_RECVERR=IPV6_RECVERR')
     )
 
-  def StartDir(self, tests):
+  def StartTests(self, tests):
     """Run every test in tests in all three variants (v4, v6, v4-mapped-v6)."""
     procs = []
     for test in tests:
@@ -138,12 +140,12 @@ class TestSet(object):
       if self.args['verbose']:
         print 'KILL [%s (%s)]' % (path, variant)
 
-  def RunDir(self, path):
-    """Find all packetdrill scripts in a directory and run them."""
+  def RunTests(self, path):
+    """Find all packetdrill scripts in a path and run them."""
     tests = self.FindTests(path)
 
     time_start = time.time()
-    procs = self.StartDir(tests)
+    procs = self.StartTests(tests)
     self.PollTestSet(procs, time_start)
 
     print(
@@ -166,7 +168,7 @@ class TestSetThread(threading.Thread):
 
   def run(self):
     """Call the main method in this thread."""
-    self.testset.RunDir(self.path)
+    self.testset.RunTests(self.path)
 
 
 class ParallelTestSet(object):
