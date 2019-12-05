@@ -36,6 +36,7 @@
 
 #include <netpacket/packet.h>
 #include <linux/filter.h>
+#include <linux/sockios.h>
 
 #include "assert.h"
 #include "ethernet.h"
