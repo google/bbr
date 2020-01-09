@@ -62,17 +62,24 @@ static int syscall_icmp_sendto(struct state *state,
 			       struct syscall_spec *syscall,
 			       struct expression_list *args, char **error);
 
-/* Provide a wrapper for the Linux gettid() system call (glibc does not). */
+#if defined(linux)
+/* Provide a wrapper for the Linux gettid() system call
+ * (glibc only provides it in version 2.30 or higher).
+ */
+#if (__GLIBC__ < 2) || ((__GLIBC__ == 2) && (__GLIBC_MINOR__ < 30))
 static pid_t gettid(void)
 {
-#ifdef linux
 	return syscall(__NR_gettid);
-#endif
+}
+#endif  /* old glibc versions */
+#endif  /* defined(linux) */
 #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+static pid_t gettid(void)
+{
 	/* TODO(ncardwell): Implement me. XXX */
 	return 0;
-#endif /* defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)*/
 }
+#endif /* defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)*/
 
 /* Read a whole file into the given buffer of the given length. */
 static void read_whole_file(const char *path, char *buffer, int max_bytes)
