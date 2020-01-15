@@ -584,6 +584,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <expression_list> expression_list function_arguments
 %type <expression> expression binary_expression array sub_expr_list
 %type <expression> any_int decimal_integer hex_integer
+%type <expression> string_expression string_sequence
 %type <expression> inaddr in6addr sockaddr msghdr iovec pollfd opt_revents linger
 %type <expression> opt_cmsg cmsg_expr
 %type <expression> scm_timestamping_expr
@@ -1406,11 +1407,8 @@ expression
 	$$->value.buf.ptr = $1;
 	$$->value.buf.len = strlen($1);
 }
-| STRING            {
-	$$ = new_expression(EXPR_STRING);
-	$$->value.buf.ptr = $1;
-	$$->value.buf.len = strlen($1);
-	$$->format = "\"%s\"";
+| string_sequence {
+	$$ = $1;
 }
 | STRING ELLIPSIS   {
 	$$ = new_expression(EXPR_STRING);
@@ -1482,6 +1480,30 @@ decimal_integer
 hex_integer
 : HEX_INTEGER       {
 	$$ = new_integer_expression($1, "%#lx");
+}
+;
+
+string_expression
+: STRING            {
+	$$ = new_expression(EXPR_STRING);
+	$$->value.buf.ptr = $1;
+	$$->value.buf.len = strlen($1);
+	$$->format = "\"%s\"";
+}
+;
+
+string_sequence
+: string_expression {
+	$$ = $1;
+}
+| string_sequence string_expression {    /* string concatenation */
+	$$ = new_expression(EXPR_BINARY);
+	struct binary_expression *binary =
+			  malloc(sizeof(struct binary_expression));
+	binary->op = strdup(".");
+	binary->lhs = $1;
+	binary->rhs = $2;
+	$$->value.binary = binary;
 }
 ;
 

@@ -401,6 +401,26 @@ void free_expression_list(struct expression_list *list)
 	}
 }
 
+/* Concatenate lhs and rhs into out. Each input may contain \x00 bytes. */
+static void concatenate_string_expressions(struct expression *out,
+					   struct expression *lhs,
+					   struct expression *rhs)
+{
+	char *dest;
+	u32 buf_len;
+
+	buf_len = lhs->value.buf.len + rhs->value.buf.len;
+	out->value.buf.ptr = malloc(buf_len + 1);
+	out->value.buf.len = buf_len;
+
+	dest = out->value.buf.ptr;
+	memcpy(dest, lhs->value.buf.ptr, lhs->value.buf.len);
+	dest += lhs->value.buf.len;
+	memcpy(dest, rhs->value.buf.ptr, rhs->value.buf.len);
+	dest += rhs->value.buf.len;
+	*dest = '\0';  /* null-terminate for safety/debugging/printing */
+}
+
 static int evaluate_binary_expression(struct expression *in,
 				      struct expression *out, char **error)
 {
@@ -423,6 +443,14 @@ static int evaluate_binary_expression(struct expression *in,
 		} else {
 			out->value.num = lhs->value.num | rhs->value.num;
 			result = STATUS_OK;
+		}
+	} else if (strcmp(".", in->value.binary->op) == 0) {
+		if (lhs->type == EXPR_STRING && rhs->type == EXPR_STRING) {
+			out->type = EXPR_STRING;
+			concatenate_string_expressions(out, lhs, rhs);
+			result = STATUS_OK;
+		} else {
+			asprintf(error, "bad input types for concatenation");
 		}
 	} else if (strcmp("=", in->value.binary->op) == 0) {
 		out->value.binary = calloc(1, sizeof(struct binary_expression));
