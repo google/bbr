@@ -58,12 +58,18 @@ enum expression_t {
 /* Convert an expression type to a human-readable string */
 const char *expression_type_to_string(enum expression_t type);
 
+/* A memory buffer/string. Uses a len because it can contain \x00 bytes. */
+struct memory_buffer {
+	char *ptr;
+	size_t len;	/* does not include any terminating '\0' for strings */
+};
+
 /* An expression in a script */
 struct expression {
 	enum expression_t type;
 	union {
 		s64 num;
-		char *string;
+		struct memory_buffer buf;
 		struct linger linger;
 		struct gre gre;
 		struct in6_addr address_ipv6;

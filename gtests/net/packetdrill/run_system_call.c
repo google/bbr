@@ -2568,7 +2568,7 @@ static int syscall_getsockopt(struct state *state, struct syscall_spec *syscall,
 	}
 
 	if (val_expression->type == EXPR_STRING) {
-		script_optval = val_expression->value.string;
+		script_optval = val_expression->value.buf.ptr;
 
 		if (strcmp(live_optval, script_optval) != 0) {
 			asprintf(error,
@@ -2681,7 +2681,7 @@ static int syscall_setsockopt(struct state *state, struct syscall_spec *syscall,
 	} else if (val_expression->type == EXPR_MPLS_STACK) {
 		optval = val_expression->value.mpls_stack;
 	} else if (val_expression->type == EXPR_STRING) {
-		optval = val_expression->value.string;
+		optval = val_expression->value.buf.ptr;
 	} else if (val_expression->type == EXPR_LIST) {
 		if (s32_bracketed_arg(args, 3, &optval_s32, error))
 			return STATUS_ERR;
@@ -2809,7 +2809,7 @@ static int syscall_open(struct state *state, struct syscall_spec *syscall,
 	name_expression = get_arg(args, 0, error);
 	if (check_type(name_expression, EXPR_STRING, error))
 		return STATUS_ERR;
-	name = name_expression->value.string;
+	name = name_expression->value.buf.ptr;
 	if (s32_arg(args, 1, &flags, error))
 		return STATUS_ERR;
 

@@ -229,9 +229,9 @@ static int unescape_cstring_expression(const char *input_string,
 {
 	int bytes = strlen(input_string);
 	out->type = EXPR_STRING;
-	out->value.string = (char *)calloc(1, bytes + 1);
+	out->value.buf.ptr = (char *)calloc(1, bytes + 1);
 	const char *c_in = input_string;
-	char *c_out = out->value.string;
+	char *c_out = out->value.buf.ptr;
 	while (*c_in != '\0') {
 		if (*c_in == '\\') {
 			++c_in;
@@ -283,6 +283,7 @@ static int unescape_cstring_expression(const char *input_string,
 		++c_in;
 		++c_out;
 	}
+	out->value.buf.len = c_out - out->value.buf.ptr;
 	return STATUS_OK;
 }
 
@@ -300,12 +301,12 @@ void free_expression(struct expression *expression)
 	case EXPR_LINGER:
 		break;
 	case EXPR_WORD:
-		assert(expression->value.string);
-		free(expression->value.string);
+		assert(expression->value.buf.ptr);
+		free(expression->value.buf.ptr);
 		break;
 	case EXPR_STRING:
-		assert(expression->value.string);
-		free(expression->value.string);
+		assert(expression->value.buf.ptr);
+		free(expression->value.buf.ptr);
 		break;
 	case EXPR_SOCKET_ADDRESS_IPV4:
 		assert(expression->value.socket_address_ipv4);
@@ -654,12 +655,12 @@ static int evaluate(struct expression *in,
 		break;
 	case EXPR_WORD:
 		out->type = EXPR_INTEGER;
-		if (symbol_to_int(in->value.string,
+		if (symbol_to_int(in->value.buf.ptr,
 				  &out->value.num, error))
 			return STATUS_ERR;
 		break;
 	case EXPR_STRING:
-		if (unescape_cstring_expression(in->value.string, out, error))
+		if (unescape_cstring_expression(in->value.buf.ptr, out, error))
 			return STATUS_ERR;
 		break;
 	case EXPR_SOCKET_ADDRESS_IPV4:	/* copy as-is */

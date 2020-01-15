@@ -1403,16 +1403,19 @@ expression
 | any_int           { $$ = $1; }
 | WORD              {
 	$$ = new_expression(EXPR_WORD);
-	$$->value.string = $1;
+	$$->value.buf.ptr = $1;
+	$$->value.buf.len = strlen($1);
 }
 | STRING            {
 	$$ = new_expression(EXPR_STRING);
-	$$->value.string = $1;
+	$$->value.buf.ptr = $1;
+	$$->value.buf.len = strlen($1);
 	$$->format = "\"%s\"";
 }
 | STRING ELLIPSIS   {
 	$$ = new_expression(EXPR_STRING);
-	$$->value.string = $1;
+	$$->value.buf.ptr = $1;
+	$$->value.buf.len = strlen($1);
 	$$->format = "\"%s\"...";
 }
 | binary_expression {
@@ -1498,7 +1501,8 @@ binary_expression
 			  malloc(sizeof(struct binary_expression));
 	binary->op = strdup("=");
 	binary->lhs = new_expression(EXPR_WORD);
-	binary->lhs->value.string = $1;
+	binary->lhs->value.buf.ptr = $1;
+	binary->lhs->value.buf.len = strlen($1);
 	binary->rhs = $3;
 	$$->value.binary = binary;
 }
