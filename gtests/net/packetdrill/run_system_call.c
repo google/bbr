@@ -2570,7 +2570,7 @@ static int syscall_getsockopt(struct state *state, struct syscall_spec *syscall,
 	if (val_expression->type == EXPR_STRING) {
 		script_optval = val_expression->value.buf.ptr;
 
-		if (strcmp(live_optval, script_optval) != 0) {
+		if (memcmp(live_optval, script_optval, script_optlen) != 0) {
 			asprintf(error,
 				 "Bad getsockopt optval: "
 				 "expected: '%s' actual: '%s'",
