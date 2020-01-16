@@ -130,12 +130,12 @@ direction: '<'
          | '>'
 
 tos_spec: ip_ecn
+        | ECT01
         | TOS HEX_INTEGER
 
 ip_ecn: NO_ECN
       | ECT0
       | ECT1
-      | ECT01
       | CE
 
 flags: WORD
