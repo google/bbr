@@ -2570,6 +2570,18 @@ static int syscall_getsockopt(struct state *state, struct syscall_spec *syscall,
 	if (val_expression->type == EXPR_STRING) {
 		script_optval = val_expression->value.buf.ptr;
 
+		if (script_optlen != val_expression->value.buf.len) {
+			asprintf(error,
+				 "Bad getsockopt optval: "
+				 "expected optlen (%d bytes) does not match "
+				 "length of expected optval string '%s' "
+				 "(%d bytes)",
+				 script_optlen,
+				 (char *)script_optval,
+				 (int)val_expression->value.buf.len);
+			goto error_out;
+		}
+
 		if (memcmp(live_optval, script_optval, script_optlen) != 0) {
 			asprintf(error,
 				 "Bad getsockopt optval: "
