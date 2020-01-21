@@ -23,6 +23,8 @@
  */
 
 #include "types.h"
+#include <ctype.h>
+#include <stdlib.h>
 
 struct in_addr in4addr_any    = { .s_addr = INADDR_ANY };
 
@@ -41,4 +43,24 @@ void hex_dump(const u8 *buffer, int bytes, char **hex)
 	}
 	fprintf(s, "\n");
 	fclose(s);
+}
+
+char *to_printable_string(const char *in, int in_len)
+{
+	int out_len, i, j;
+	char *out;
+
+	out_len = in_len * 4;	/* escape code is 4B */
+	out_len += 1;		/* terminating null */
+	out = malloc(out_len);
+
+	for (i = 0, j = 0; i < in_len; i++) {
+		if (isprint(in[i]) ||
+		    (i == in_len - 1 && in[i] == 0) /* terminating null */)
+			out[j++] = in[i];
+		else
+			j += sprintf(out + j, "\\x%02hhx", in[i]);
+	}
+	out[j] = 0;
+	return out;
 }

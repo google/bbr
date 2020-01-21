@@ -165,6 +165,10 @@ static inline s64 timeval_to_usecs(const struct timeval *tv)
 
 /* Return a malloc-allocated hex dump of the given buffer of the given length */
 extern void hex_dump(const u8 *buffer, int bytes, char **hex);
+/* Return a malloc-allocated dump of the given buffer of the given length,
+ * with non-printable bytes replaced by \xAB hex escape codes.
+ */
+extern char *to_printable_string(const char *in, int in_len);
 
 static inline bool is_valid_u8(s64 x)
 {

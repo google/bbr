@@ -2519,6 +2519,7 @@ static int syscall_getsockopt(struct state *state, struct syscall_spec *syscall,
 {
 	int script_fd, live_fd, level, optname, result;
 	void *live_optval = NULL, *script_optval = NULL;
+	char *live_optval_pretty = NULL, *script_optval_pretty = NULL;
 	s32 script_optlen, script_optval_s32;
 	socklen_t live_optlen;
 	struct expression *val_expression = NULL;
@@ -2569,6 +2570,12 @@ static int syscall_getsockopt(struct state *state, struct syscall_spec *syscall,
 
 	if (val_expression->type == EXPR_STRING) {
 		script_optval = val_expression->value.buf.ptr;
+		script_optval_pretty =
+			to_printable_string(
+				val_expression->value.buf.ptr,
+				val_expression->value.buf.len);
+		live_optval_pretty =
+			to_printable_string(live_optval, live_optlen);
 
 		if (script_optlen != val_expression->value.buf.len) {
 			asprintf(error,
@@ -2577,7 +2584,7 @@ static int syscall_getsockopt(struct state *state, struct syscall_spec *syscall,
 				 "length of expected optval string '%s' "
 				 "(%d bytes)",
 				 script_optlen,
-				 (char *)script_optval,
+				 script_optval_pretty,
 				 (int)val_expression->value.buf.len);
 			goto error_out;
 		}
@@ -2586,7 +2593,7 @@ static int syscall_getsockopt(struct state *state, struct syscall_spec *syscall,
 			asprintf(error,
 				 "Bad getsockopt optval: "
 				 "expected: '%s' actual: '%s'",
-				 (char *)script_optval, (char *)live_optval);
+				 script_optval_pretty, live_optval_pretty);
 			goto error_out;
 		}
 	} else if (val_expression->type == EXPR_LIST) {
@@ -2658,6 +2665,8 @@ static int syscall_getsockopt(struct state *state, struct syscall_spec *syscall,
 
 error_out:
 	free(live_optval);
+	free(live_optval_pretty);
+	free(script_optval_pretty);
 	return status;
 }
 
