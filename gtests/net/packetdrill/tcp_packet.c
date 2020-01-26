@@ -27,18 +27,43 @@
 #include "ip_packet.h"
 #include "tcp.h"
 
-/* The full list of valid TCP bit flag characters */
-static const char valid_tcp_flags[] = "FSRP.EWCU";
+/*
+ * The full list of valid TCP bit flag characters.
+ * The numeric 0..7 is used as shorthand for the ACE field.
+ *
+ * In the list of valid flags the dot, the most common flag, is placed first.
+ */
+static const char valid_tcp_flags[] = ".FSRPEWAU01234567";
+static const char ace_tcp_flags[] = "01234567";
+static const char ecn_tcp_flags[] = "EWA";
 
 /* Are all the TCP flags in the given string valid? */
 static bool is_tcp_flags_spec_valid(const char *flags, char **error)
 {
 	const char *s;
+	bool has_ecn_flag = false;
+	bool has_ace_flag = false;
 
 	for (s = flags; *s != '\0'; ++s) {
 		if (!strchr(valid_tcp_flags, *s)) {
 			asprintf(error, "Invalid TCP flag: '%c'", *s);
 			return false;
+		}
+		if (strchr(ecn_tcp_flags, *s)) {
+			if (has_ace_flag) {
+				asprintf(error,
+					 "Conflicting TCP flag: '%c'", *s);
+				return false;
+			}
+			has_ecn_flag = true;
+		}
+		if (strchr(ace_tcp_flags, *s)) {
+			if (has_ecn_flag || has_ace_flag) {
+				asprintf(error,
+					 "Conflicting TCP flag: '%c'", *s);
+				return false;
+			}
+			has_ace_flag = true;
 		}
 	}
 	return true;
@@ -49,6 +74,19 @@ static inline int is_tcp_flag_set(char flag, const char *flags)
 {
 	return (strchr(flags, flag) != NULL) ? 1 : 0;
 }
+
+/* Find and return the first numeric flag for ACE */
+static inline int tcp_flag_ace_count(const char *flags)
+{
+	const char *s;
+
+	for (s = flags; *s != '\0'; ++s) {
+		if (strchr(ace_tcp_flags, *s))
+			return ((int)*s - (int)'0');
+	}
+	return 0;
+}
+
 
 struct packet *new_tcp_packet(int address_family,
 			       enum direction_t direction,
@@ -74,6 +112,7 @@ struct packet *new_tcp_packet(int address_family,
 	const int tcp_header_bytes = sizeof(struct tcp) + tcp_option_bytes;
 	const int ip_bytes =
 		 ip_header_bytes + tcp_header_bytes + tcp_payload_bytes;
+	int ace;
 
 	/* Sanity-check all the various lengths */
 	if (ip_option_bytes & 0x3) {
@@ -150,8 +189,24 @@ struct packet *new_tcp_packet(int address_family,
 	packet->tcp->psh = is_tcp_flag_set('P', flags);
 	packet->tcp->ack = is_tcp_flag_set('.', flags);
 	packet->tcp->urg = is_tcp_flag_set('U', flags);
-	packet->tcp->ece = is_tcp_flag_set('E', flags);
-	packet->tcp->cwr = is_tcp_flag_set('W', flags);
+
+	ace = tcp_flag_ace_count(flags);
+	if (ace != 0) {
+		/*
+		 * After validity check, ACE value doesn't
+		 * coexist with ECN flags.
+		 * Need to force a boolean check for the
+		 * 1-bit fields to get correctly set.
+		 */
+		packet->flags |= FLAG_PARSE_ACE;
+		packet->tcp->ece = ((ace & 1) != 0);
+		packet->tcp->cwr = ((ace & 2) != 0);
+		packet->tcp->ae  = ((ace & 4) != 0);
+	} else {
+		packet->tcp->ece = is_tcp_flag_set('E', flags);
+		packet->tcp->cwr = is_tcp_flag_set('W', flags);
+		packet->tcp->ae  = is_tcp_flag_set('A', flags);
+	}
 
 	if (tcp_options == NULL) {
 		packet->flags |= FLAG_OPTIONS_NOCHECK;

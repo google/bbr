@@ -569,7 +569,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <integer> gre_sum gre_off gre_key gre_seq
 %type <integer> opt_icmp_echo_id
 %type <integer> flow_label
-%type <string> icmp_type opt_icmp_code flags
+%type <string> icmp_type opt_icmp_code opt_ack_flag opt_word ack_and_ace flags
 %type <string> opt_tcp_fast_open_cookie hex_blob
 %type <string> opt_note note word_list
 %type <string> option_flag option_value script
@@ -1102,10 +1102,34 @@ ip_ecn
 | CE		{ $$ = IP_ECN_CE; }
 ;
 
+opt_ack_flag
+:		{
+	$$ = strdup("");
+}
+| '.'		{
+	$$ = strdup(".");
+}
+;
+
+opt_word
+:		{
+	$$ = strdup("");
+}
+| WORD		{
+	$$ = $1;
+}
+;
+
+ack_and_ace
+: FLOAT     {
+	$$ = strdup(yytext);
+}
+;
+
 flags
-: WORD         { $$ = $1; }
+: WORD opt_ack_flag    { asprintf(&($$), "%s%s", $1, $2); free($1); free($2); }
+| opt_word ack_and_ace { asprintf(&($$), "%s%s", $1, $2); free($1); free($2); }
 | '.'          { $$ = strdup("."); }
-| WORD '.'     { asprintf(&($$), "%s.", $1); free($1); }
 | '-'          { $$ = strdup(""); }  /* no TCP flags set in segment */
 ;
 

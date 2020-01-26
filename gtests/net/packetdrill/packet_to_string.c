@@ -148,6 +148,7 @@ static int tcp_packet_to_string(FILE *s, struct packet *packet,
 				enum dump_format_t format, char **error)
 {
 	int result = STATUS_OK;       /* return value */
+	int ace = 0;
 
 	if ((format == DUMP_FULL) || (format == DUMP_VERBOSE)) {
 		endpoints_to_string(s, packet);
@@ -168,10 +169,22 @@ static int tcp_packet_to_string(FILE *s, struct packet *packet,
 		fputc('.', s);
 	if (packet->tcp->urg)
 		fputc('U', s);
-	if (packet->tcp->ece)
-		fputc('E', s);   /* ECN *E*cho sent (ECN) */
-	if (packet->tcp->cwr)
-		fputc('W', s);   /* Congestion *W*indow reduced (ECN) */
+	if (packet->flags & FLAG_PARSE_ACE) {
+		if (packet->tcp->ece)
+			ace |= 1;
+		if (packet->tcp->cwr)
+			ace |= 2;
+		if (packet->tcp->ae)
+			ace |= 4;
+		fputc('0' + ace, s);
+	} else {
+		if (packet->tcp->ece)
+			fputc('E', s);   /* ECN *E*cho sent (ECN) */
+		if (packet->tcp->cwr)
+			fputc('W', s);   /* Congestion *W*indow reduced (ECN) */
+		if (packet->tcp->ae)
+			fputc('A', s);   /* *A*ccurate ECN */
+	}
 
 	fprintf(s, " %u:%u(%u) ",
 		ntohl(packet->tcp->seq),

@@ -783,6 +783,14 @@ static int tcp_options_allowance(const struct packet *actual_packet,
 		return 0;
 }
 
+/* Return the AccECN ACE count associated with the given TCP header. */
+static int tcp_ace_field(const struct tcp *tcp)
+{
+	return  (tcp->ae  ? 4 : 0) |
+		(tcp->cwr ? 2 : 0) |
+		(tcp->ece ? 1 : 0);
+}
+
 /* Verify that required actual IPv4 header fields are as the script expected. */
 static int verify_ipv4(
 	const struct packet *actual_packet,
@@ -891,12 +899,20 @@ static int verify_tcp(
 	    check_field("tcp_urg",
 			script_tcp->urg,
 			actual_tcp->urg, error) ||
-	    check_field("tcp_ece",
+	    ((script_packet->flags & FLAG_PARSE_ACE) &&
+		check_field("tcp_ace",
+			tcp_ace_field(script_tcp),
+			tcp_ace_field(actual_tcp), error)) ||
+	    (!(script_packet->flags & FLAG_PARSE_ACE) &&
+		(check_field("tcp_ece",
 			script_tcp->ece,
 			actual_tcp->ece, error) ||
-	    (strict && check_field("tcp_cwr",
+		 (strict && check_field("tcp_cwr",
 			script_tcp->cwr,
 			actual_tcp->cwr, error)) ||
+		 check_field("tcp_ae",
+			script_tcp->ae,
+			actual_tcp->ae,  error))) ||
 	    check_field("tcp_reserved_bits",
 			script_tcp->res1,
 			actual_tcp->res1, error) ||

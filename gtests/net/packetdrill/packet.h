@@ -104,6 +104,7 @@ struct packet {
 	u32 flags;		/* various meta-flags */
 #define FLAG_WIN_NOCHECK	0x1  /* don't check TCP receive window */
 #define FLAG_OPTIONS_NOCHECK	0x2  /* don't check TCP options */
+#define FLAG_PARSE_ACE		0x400 /* output parsed AccECN ACE field */
 
 	enum tos_chk_t tos_chk;	/* how to treat the TOS byte of a packet */
 
