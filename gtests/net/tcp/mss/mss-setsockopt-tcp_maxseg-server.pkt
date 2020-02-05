@@ -25,4 +25,4 @@
 
 // IW10 MSS should yield outgoing TSO packet with 10*1100 == 11000 bytes:
   +.1 write(4, ..., 12000) = 12000
-   +0 > . 1:11001(11000) ack 1
+   +0 > P. 1:11001(11000) ack 1

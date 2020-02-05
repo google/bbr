@@ -19,7 +19,7 @@
    +0 accept(3, ..., ...) = 4
 
  +.01 write(4, ..., 20000) = 20000
-   +0 > . 1:10001(10000) ack 1
+   +0 > P. 1:10001(10000) ack 1
 
 // Shutdown SHUT_RDDWR enqueues a FIN, but we don't have
 // cwnd to send it.
@@ -27,7 +27,7 @@
 
 // Receive an ACK and send more data in slow start.
 +.001 < . 1:1(0) ack 1001 win 257
-   +0 > . 10001:12001(2000) ack 1
+   +0 > P. 10001:12001(2000) ack 1
 
 // TLP after 2*RTT + min_rto
 +.005 > . 12001:13001(1000) ack 1

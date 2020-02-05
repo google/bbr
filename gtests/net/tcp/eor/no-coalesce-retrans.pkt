@@ -34,7 +34,7 @@
 // This chunk should not be appended to the skbs created for the previous chunk.
    +0 write(4, ..., 10000) = 10000
 
-   +0 > . 1:10001(10000) ack 1
+   +0 > P. 1:10001(10000) ack 1
 +.001 < .  1:1(0) ack 10001 win 514
 // Now we have enough room to send out the 2 x 400B packets out.
    +0 > P. 10001:10801(800) ack 1

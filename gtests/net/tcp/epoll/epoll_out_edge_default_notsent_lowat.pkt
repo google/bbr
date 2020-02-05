@@ -36,7 +36,7 @@
    +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
 
    // The ack does not open up enough space to send EPOLLOUT to the user.
-   +0 > . 1:10001(10000) ack 1
+   +0 > P. 1:10001(10000) ack 1
    +0 < . 1:1(0) ack 10001 win 257
    +0 > P. 10001:26001(16000) ack 1
    +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
@@ -53,19 +53,19 @@
 
    // The ack opens enough space to send EPOLLOUT to the user.
    +0 < . 1:1(0) ack 42001 win 257
-   +0 > . 42001:74001(32000) ack 1
+   +0 > P. 42001:74001(32000) ack 1
    +0 epoll_wait(5, {events=EPOLLOUT, fd=4}, 1, 0) = 1
 
    // The ack opens more space, but EPOLLET prevents a second EPOLLOUT.
    +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
    +0 < . 1:1(0) ack 74001 win 257
    +0 epoll_wait(5, {events=0, ptr=0}, 1, 0) = 0
-   +0 > . 74001:106001(32000) ack 1
+   +0 > P. 74001:106001(32000) ack 1
 
    // Another partial write.
    +0 write(4, ..., 180000) = 112000
 
    // This ack opens more space, so we send EPOLLOUT.
    +0 < . 1:1(0) ack 106001 win 257
-   +0 > . 106001:138001(32000) ack 1
+   +0 > P. 106001:138001(32000) ack 1
    +0 epoll_wait(5, {events=EPOLLOUT, fd=4}, 1, 0) = 1

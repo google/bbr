@@ -32,5 +32,5 @@
 // Verify that we do not retransmit the SACKed segments.
  +.01 < . 1:1(0) ack 13141 win 65535 <sack 16061:17521 20441:26281,nop,nop>
    +0 > . 13141:16061(2920) ack 1
-   +0 > . 17521:20441(2920) ack 1
+   +0 > P. 17521:20441(2920) ack 1
  +.01 < . 1:1(0) ack 26281 win 65535

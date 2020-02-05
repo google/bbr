@@ -18,7 +18,7 @@
 
 // Write some data, and send the initial congestion window.
    +0 write(4, ..., 15000) = 15000
-   +0 > . 1:10001(10000) ack 1
+   +0 > P. 1:10001(10000) ack 1
 
 // Limited transmit: on first dupack, send a new data segment.
  +.11 < . 1:1(0) ack 1 win 320 <sack 1001:2001,nop,nop>
@@ -30,7 +30,7 @@
 
 // It turned out to be reordering, not loss.
  +.01 < . 1:1(0) ack 3001 win 320
-   +0 > . 12001:14001(2000) ack 1
+   +0 > P. 12001:14001(2000) ack 1
 
  +.02 < . 1:1(0) ack 5001 win 320
    +0 > P. 14001:15001(1000) ack 1

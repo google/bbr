@@ -27,7 +27,7 @@
 // the previous chunk.
    +0 write(4, ..., 2000) = 2000
 
-   +0 > . 1:10001(10000) ack 1
+   +0 > P. 1:10001(10000) ack 1
 +.001 < .  1:1(0) ack 10001 win 514
 // Now we have enough room to send out the 2 x 400B packets out.
    +0 > P. 10001:20801(10800) ack 1
