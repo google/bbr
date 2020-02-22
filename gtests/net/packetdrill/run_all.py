@@ -61,6 +61,11 @@ class TestSet(object):
     return self.StartTest(
         path, 'ipv4',
         ('--ip_version=ipv4 '
+         '--local_ip=192.168.0.2 '
+         '--gateway_ip=192.168.0.1 '
+         '--netmask_ip=255.255.0.0 '
+         '--remote_ip=192.0.2.1 '
+         '-D TFO_COOKIE=de4f234f0f433a55 '
          '-D CMSG_LEVEL_IP=SOL_IP '
          '-D CMSG_TYPE_RECVERR=IP_RECVERR')
     )
@@ -70,6 +75,10 @@ class TestSet(object):
     return self.StartTest(
         path, 'ipv6',
         ('--ip_version=ipv6 --mtu=1520 '
+         '--local_ip=fd3d:fa7b:d17d::0 '
+         '--gateway_ip=fd3d:fa7b:d17d:8888::0 '
+         '--remote_ip=2001:DB8::1 '
+         '-D TFO_COOKIE=6aa6ae70c288023b '
          '-D CMSG_LEVEL_IP=SOL_IPV6 '
          '-D CMSG_TYPE_RECVERR=IPV6_RECVERR')
     )
@@ -79,6 +88,11 @@ class TestSet(object):
     return self.StartTest(
         path, 'ipv4-mapped-v6',
         ('--ip_version=ipv4-mapped-ipv6 '
+         '--local_ip=192.168.0.2 '
+         '--gateway_ip=192.168.0.1 '
+         '--netmask_ip=255.255.0.0 '
+         '--remote_ip=192.0.2.1 '
+         '-D TFO_COOKIE=de4f234f0f433a55 '
          '-D CMSG_LEVEL_IP=SOL_IPV6 '
          '-D CMSG_TYPE_RECVERR=IPV6_RECVERR')
     )
