@@ -472,8 +472,11 @@ int netdev_receive_loop(struct packet_socket *psock,
 		*packet = packet_new(PACKET_READ_BYTES);
 
 		/* Sniff the next outbound packet from the kernel under test. */
-		if (packet_socket_receive(psock, direction, *packet, &in_bytes))
+		if (packet_socket_receive(psock, direction, *packet, &in_bytes)) {
+			packet_free(*packet);
+			*packet = NULL;
 			continue;
+		}
 
 		++*num_packets;
 		result = parse_packet(*packet, in_bytes, layer, error);
