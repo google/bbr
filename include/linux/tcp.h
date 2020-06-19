@@ -369,8 +369,9 @@ struct tcp_sock {
 	u8	compressed_ack;
 	u8	dup_ack_counter:2,
 		tlp_retrans:1,	/* TLP is a retransmission */
+		tlp_orig_data_app_limited:1, /* app-limited before TLP rtx? */
 		tcp_usec_ts:1, /* TSval values in usec */
-		unused:4;
+		unused:3;
 	u8	thin_lto    : 1,/* Use linear timeouts for thin streams */
 		recvmsg_inq : 1,/* Indicate # of bytes in queue upon recvmsg */
 		fastopen_connect:1, /* FASTOPEN_CONNECT sockopt */
