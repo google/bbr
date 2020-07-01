@@ -15,6 +15,25 @@ Links:
 External links:
 * [using packetdrill for teaching TCP](http://beta.computer-networking.info/syllabus/default/exercises/tcp-2.html)
 
+# How To Get Started with packetdrill
+
+To check out and build packetdrill:
+
+```
+git clone https://github.com/google/packetdrill.git
+cd packetdrill/gtests/net/packetdrill
+./configure
+make
+```
+
+If you are on a machine with a recent Linux kernel you can then su to root and
+try running the tests included in the packetdrill distribution:
+
+```
+cd ..
+./packetdrill/run_all.py -S -l
+```
+
 # How To Submit a Patch for packetdrill
 
 We welcome patches with bug fixes or new features for packetdrill. The packetdrill project uses git for source code management. Please follow the following steps when sending in a patch for packetdrill:
