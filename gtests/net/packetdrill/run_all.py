@@ -149,10 +149,12 @@ class TestSet(object):
           procs.remove(entry)
 
     self.num_timedout = len(procs)
-    for proc, path, variant, _, _ in procs:
+    for proc, path, variant, outfile, errfile in procs:
       proc.kill()
       if self.args['verbose']:
         print 'KILL [%s (%s)]' % (path, variant)
+        if self.args['log_on_error']:
+          self.Log(outfile, errfile)
 
   def RunTests(self, path):
     """Find all packetdrill scripts in a path and run them."""
