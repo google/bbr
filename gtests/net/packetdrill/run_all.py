@@ -149,7 +149,7 @@ class TestSet(object):
           procs.remove(entry)
 
     self.num_timedout = len(procs)
-    for proc, path, variant in procs:
+    for proc, path, variant, _, _ in procs:
       proc.kill()
       if self.args['verbose']:
         print 'KILL [%s (%s)]' % (path, variant)
