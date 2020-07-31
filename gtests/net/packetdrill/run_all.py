@@ -19,7 +19,7 @@ class TestSet(object):
     self.args = args
     self.tools_path = os.path.abspath('./packetdrill')
     self.default_args = '--send_omit_free'
-    self.max_runtime = 120
+    self.max_runtime = 180
     self.num_pass = 0
     self.num_fail = 0
     self.num_timedout = 0
