@@ -7,7 +7,6 @@
 
 // enforce strict segment checking (and turn off gso) to measure probe length
 --strict_segments
---remote_ip=192.168.1.1
 
 // configure a small initial mtu
 // increase cwnd to the minimum tcp_mtu_probe needs
@@ -15,7 +14,7 @@
  ../common/set_sysctls.py \
 	/proc/sys/net/ipv4/tcp_mtu_probing=2 \
 	/proc/sys/net/ipv4/tcp_base_mss=512
- ip route change 192.168.1.1 via 192.168.0.2 dev tun0 advmss 600 mtu lock 640 initcwnd 11
+ ip route change 192.0.2.1 via 192.168.0.2 dev tun0 advmss 600 mtu lock 640 initcwnd 11
  ethtool -K tun0 gso off tso off
 `
 
@@ -31,7 +30,7 @@
   +.1 accept(3, ..., ...) = 4
 
    // increase mtu
-   +0 `ip route change 192.168.1.1 via 192.168.0.2 dev tun0 advmss 1460 mtu lock 1500`
+   +0 `ip route change 192.0.2.1 via 192.168.0.2 dev tun0 advmss 1460 mtu lock 1500`
 
    // new write will use known mtu, except for larger probe in first segment
    // write must be much larger than probe, see size_needed

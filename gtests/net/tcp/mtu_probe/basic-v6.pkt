@@ -9,8 +9,6 @@
 --strict_segments
 --ip_version=ipv6
 --local_ip=fd::1
---gateway_ip=fd::2
---remote_ip=fd::3
 
 // configure a small initial mtu
 // increase cwnd to the minimum tcp_mtu_probe needs
@@ -18,7 +16,7 @@
  ../common/set_sysctls.py \
 	/proc/sys/net/ipv4/tcp_mtu_probing=2 \
 	/proc/sys/net/ipv4/tcp_base_mss=512
- ip -6 route change fd::3 via fd::2 dev tun0 advmss 600 mtu lock 660 initcwnd 11
+ ip -6 route change 2001:DB8::1 via fd3d:fa7b:d17d:8888::0 dev tun0 advmss 600 mtu lock 660 initcwnd 11
  ethtool -K tun0 gso off tso off
 `
 
@@ -34,7 +32,7 @@
   +.1 accept(3, ..., ...) = 4
 
    // increase mtu
-   +0 `ip -6 route change fd::3 via fd::2 dev tun0 advmss 1480 mtu lock 1520`
+   +0 `ip -6 route change 2001:DB8::1 via fd3d:fa7b:d17d:8888::0 dev tun0 advmss 1480 mtu lock 1520`
 
    // new write will use known mtu, except for larger probe in first segment
    // write must be much larger than probe, see size_needed
