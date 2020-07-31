@@ -150,7 +150,11 @@ class TestSet(object):
 
     self.num_timedout = len(procs)
     for proc, path, variant, outfile, errfile in procs:
-      proc.kill()
+      try:
+        proc.kill()
+      except:
+        if self.args['verbose']:
+          print 'The test process has exited'
       if self.args['verbose']:
         print 'KILL [%s (%s)]' % (path, variant)
         if self.args['log_on_error']:
