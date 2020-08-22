@@ -26,12 +26,13 @@ cd packetdrill/gtests/net/packetdrill
 make
 ```
 
-If you are on a machine with a recent Linux kernel you can then su to root and
-try running the tests included in the packetdrill distribution:
+If you are on a machine with a recent Linux kernel you can su to root and
+run all of the TCP stack tests included in the packetdrill distribution
+in the tcp/ directory:
 
 ```
 cd ..
-./packetdrill/run_all.py -S -l
+./packetdrill/run_all.py -S -v -L -l tcp/
 ```
 
 # How To Submit a Patch for packetdrill
