@@ -105,7 +105,7 @@ struct tcp_option {
 			u8 cookie[MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES];
 		} fast_open_exp;
 	} data;
-} __packed tcp_option;
+} __packed;
 
 /* Allocate a new options list. */
 extern struct tcp_options *tcp_options_new(void);
