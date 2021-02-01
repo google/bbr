@@ -70,7 +70,7 @@ void wire_server_netdev_init(const char *netdev_name)
 	 * TOOD(ncardwell): if netdev_name is not a bonding interface,
 	 * then we should just disable LRO/GRO on that interface; if
 	 * netdev_name is a bonding interface then we should
-	 * programmatically figure out all the slave interfaces for
+	 * programmatically figure out all the physical interfaces for
 	 * the given netdev_name, instead of using this overly broad
 	 * approach.
 	 */
