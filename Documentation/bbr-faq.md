@@ -50,6 +50,15 @@ For examples on how to install netem on the ingress of a machine, see the ifb0
 example in the "How can I use netem on incoming traffic?" section of the
 [linuxfoundation.org netem page](https://wiki.linuxfoundation.org/networking/netem).
 
+Another factor to consider is that when you emulate loss with netem, the netem
+qdisc makes drop decisions in terms of entire ```sk_buff``` TSO bursts (of up
+to 44 lMTU-sized packets), rather than individual MTU-sized packets. This makes
+the loss process highly unrealistic relative to a drop process that drops X% of
+MTU-size packets: the time in between drops can be up to 44x longer, and the
+drops are much burstier (e.g. dropping 44 MTU-sized packets in a single
+```sk_buff```). For more realistic loss processes you may need to disable LRO
+and GRO.
+
 ## How can I visualize the behavior of Linux TCP BBR connections?
 
 Check out [tcpdump](http://www.tcpdump.org/),
