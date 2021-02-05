@@ -31,6 +31,25 @@ For Linux TCP BBR:
 
 Check out [TCP BBR Quick-Start: Building and Running TCP BBR on Google Compute Engine](https://github.com/google/bbr/blob/master/Documentation/bbr-quick-start.md).
 
+## How can I test Linux TCP BBR with an emulated network?
+
+For a feature-rich tool to test Linux TCP performance over emulated networks,
+check out the [transperf](https://github.com/google/transperf) tool, which
+handles the details of configuring network emulation on a single machine or
+sets of physical machines.
+
+If you want to manually configure an emulated network scenario on Linux
+machines, you can use netem directly. However, keep in mind that TCP
+performance results are not realistic when netem is installed on the sending
+machine, due to interactions between netem and mechanisms like TSQ (TCP small
+queues). To get realistic TCP performance results with netem, the netem qdisc
+has to be installed either on an intermediate "router" machine or on the
+ingress path of the receiving machine.
+
+For examples on how to install netem on the ingress of a machine, see the ifb0
+example in the "How can I use netem on incoming traffic?" section of the
+[linuxfoundation.org netem page](https://wiki.linuxfoundation.org/networking/netem).
+
 ## How can I visualize the behavior of Linux TCP BBR connections?
 
 Check out [tcpdump](http://www.tcpdump.org/),
