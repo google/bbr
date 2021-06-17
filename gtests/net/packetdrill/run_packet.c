@@ -582,7 +582,7 @@ static int map_inbound_packet(
 			asprintf(error,
 				 "unable to infer live TS ecr for "
 				 "script TS ecr %u;  "
-				 "no matching or preceding outound TS val",
+				 "no matching or preceding outbound TS val",
 				 packet_tcp_ts_ecr(live_packet));
 			return STATUS_ERR;
 		}
