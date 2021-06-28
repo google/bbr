@@ -2695,6 +2695,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->window_clamp = 0;
 	tp->delivered = 0;
 	tp->delivered_ce = 0;
+	tp->ecn_fail = 0;
 	tcp_accecn_init_counters(tp);
 	if (icsk->icsk_ca_ops->release)
 		icsk->icsk_ca_ops->release(sk);
