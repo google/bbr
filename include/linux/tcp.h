@@ -232,8 +232,10 @@ struct tcp_sock {
 		tlp_retrans:1,	/* TLP is a retransmission */
 		syn_ect_snt:2,	/* AccECN ECT memory, only */
 		syn_ect_rcv:2,	/* ... needed durign 3WHS + first seqno */
-		saw_accecn_opt:2,    /* An AccECN option was seen */
 		ecn_fail:1;	/* ECN reflector detected path mangling */
+	u8	saw_accecn_opt:2,    /* An AccECN option was seen */
+		fast_ack_mode:2, /* which fast ack mode ? */
+		unused:4;
 	u32	chrono_start;	/* Start time in jiffies of a TCP chrono */
 	u32	chrono_stat[3];	/* Time in jiffies for chrono_stat stats */
 	u8	chrono_type:2,	/* current chronograph type */
