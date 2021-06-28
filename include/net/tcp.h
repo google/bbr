@@ -1158,8 +1158,8 @@ struct tcp_congestion_ops {
 	/* hook for packet ack accounting (optional) */
 	void (*pkts_acked)(struct sock *sk, const struct ack_sample *sample);
 
-	/* override sysctl_tcp_min_tso_segs */
-	u32 (*min_tso_segs)(struct sock *sk);
+	/* pick target number of segments per TSO/GSO skb (optional): */
+	u32 (*tso_segs)(struct sock *sk, unsigned int mss_now);
 
 	/* call when packets are delivered to update cwnd and pacing rate,
 	 * after all the ca_state processing. (optional)
