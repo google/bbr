@@ -226,6 +226,7 @@ void tcp_time_wait(struct sock *sk, int state, int timeo);
 #define TCP_ACCECN_MAXSIZE		(TCPOLEN_ACCECN_BASE + \
 					 TCPOLEN_ACCECN_PERFIELD * \
 					 TCP_ACCECN_NUMFIELDS)
+#define TCP_ACCECN_BEACON_FREQ_SHIFT	2 /* Send option at least 2^2 times per RTT */
 
 /* Flags in tp->nonagle */
 #define TCP_NAGLE_OFF		1	/* Nagle's algo is disabled */

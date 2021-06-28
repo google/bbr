@@ -2698,6 +2698,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->ecn_fail = 0;
 	tcp_accecn_init_counters(tp);
 	tp->prev_ecnfield = 0;
+	tp->accecn_opt_tstamp = 0;
 	if (icsk->icsk_ca_ops->release)
 		icsk->icsk_ca_ops->release(sk);
 	memset(icsk->icsk_ca_priv, 0, sizeof(icsk->icsk_ca_priv));
