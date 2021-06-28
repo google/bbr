@@ -340,25 +340,52 @@ tcp_ecn - INTEGER
 	ECN is used only when both ends of the TCP connection indicate
 	support for it.  This feature is useful in avoiding losses due
 	to congestion by allowing supporting routers to signal
-	congestion before having to drop packets.
+	congestion before having to drop packets. The highest variant
+	of ECN feedback that both peers support is chosen by the ECN
+	negotiation (Accurate ECN, ECN, or no ECN).
+
+	The highest negotiated variant for incoming connection requests
+	and the highest variant requested by outgoing connection
+	attempts:
+
+	= ==================== ====================
+	  Incoming connections Outgoing connections
+	= ==================== ====================
+	0 No ECN               No ECN
+	1 ECN                  ECN
+	2 ECN                  No ECN
+	3 AccECN               AccECN
+	4 AccECN               ECN
+	5 AccECN               No ECN
+	= ==================== ====================
+
+	Default: 2
+
+tcp_ecn_option - INTEGER
+	Control Accurate ECN (AccECN) option sending when AccECN has been
+	successfully negotiated during handshake. Send logic inhibits
+	sending AccECN options regarless of this setting when no AccECN
+	option has been seen for the reverse direction.
 
 	Possible values are:
 
-		=  =====================================================
-		0  Disable ECN.  Neither initiate nor accept ECN.
-		1  Enable ECN when requested by incoming connections and
-		   also request ECN on outgoing connection attempts.
-		2  Enable ECN when requested by incoming connections
-		   but do not request ECN on outgoing connections.
-		=  =====================================================
+	= ============================================================
+	0 Never send AccECN option. This also disables sending AccECN
+	  option in SYN/ACK during handshake.
+	1 Send AccECN option sparingly according to the minimum option
+	  rules outlined in draft-ietf-tcpm-accurate-ecn.
+	2 Send AccECN option on every packet whenever it fits into TCP
+	  option space.
+	= ============================================================
 
 	Default: 2
 
 tcp_ecn_fallback - BOOLEAN
 	If the kernel detects that ECN connection misbehaves, enable fall
 	back to non-ECN. Currently, this knob implements the fallback
-	from RFC3168, section 6.1.1.1., but we reserve that in future,
-	additional detection mechanisms could be implemented under this
+	from RFC3168, section 6.1.1.1., as well as the ECT codepoint mangling
+	detection during the Accurate ECN handshake, but we reserve that in
+	future, additional detection mechanisms could be implemented under this
 	knob. The value	is not used, if tcp_ecn or per route (or congestion
 	control) ECN settings are disabled.
 
