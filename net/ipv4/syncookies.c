@@ -282,6 +282,17 @@ bool cookie_ecn_ok(const struct tcp_options_received *tcp_opt,
 }
 EXPORT_SYMBOL(cookie_ecn_ok);
 
+/* §4.1 [...] a server can determine that it negotiated AccECN as
+ * [...] if the ACK contains an ACE field with the value 0b010 to
+ * 0b111 (decimal 2 to 7).
+ */
+/* We don't need to check for > 7 as ACE is on 3 bits */
+bool cookie_accecn_ok(const struct tcphdr *th)
+{
+	return tcp_accecn_ace(th) > 0x1;
+}
+EXPORT_SYMBOL(cookie_accecn_ok);
+
 struct request_sock *cookie_tcp_reqsk_alloc(const struct request_sock_ops *ops,
 					    struct sock *sk,
 					    struct sk_buff *skb)
@@ -440,6 +451,7 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 
 	ireq->rcv_wscale  = rcv_wscale;
 	ireq->ecn_ok = cookie_ecn_ok(&tcp_opt, sock_net(sk), &rt->dst);
+	treq->accecn_ok = ireq->ecn_ok && cookie_accecn_ok(th);
 
 	ret = tcp_get_cookie_sock(sk, skb, req, &rt->dst, tsoff);
 	/* ip_queue_xmit() depends on our flow being setup
