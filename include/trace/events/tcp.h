@@ -246,8 +246,14 @@ TRACE_EVENT(tcp_probe,
 		__field(__u32, ssthresh)
 		__field(__u32, snd_wnd)
 		__field(__u32, srtt)
+		__field(__u64, srtt_pace)
+		__field(__u32, min_rtt)
+		__field(__u32, mrtt_pace)
+		__field(__u64, mdev_pace)
 		__field(__u32, rcv_wnd)
 		__field(__u64, sock_cookie)
+		__field(__u64, classic_ecn)
+		__field(__u64, alpha)
 	),
 
 	TP_fast_assign(
@@ -273,14 +279,20 @@ TRACE_EVENT(tcp_probe,
 		__entry->rcv_wnd = tp->rcv_wnd;
 		__entry->ssthresh = tcp_current_ssthresh(sk);
 		__entry->srtt = tp->srtt_us >> 3;
+		__entry->srtt_pace = tp->srtt_pace_us >> tp->g_srtt_shift;
+		__entry->min_rtt = tcp_min_rtt(tp);
+		__entry->mrtt_pace = tp->mrtt_pace_us;
+		__entry->mdev_pace = tp->mdev_pace_us >> tp->g_mdev_shift;
 		__entry->sock_cookie = sock_gen_cookie(sk);
+		__entry->classic_ecn = tp->classic_ecn; /* scaled */
+		__entry->alpha = tp->alpha; /* scaled */
 	),
 
-	TP_printk("src=%pISpc dest=%pISpc mark=%#x data_len=%d snd_nxt=%#x snd_una=%#x snd_cwnd=%u ssthresh=%u snd_wnd=%u srtt=%u rcv_wnd=%u sock_cookie=%llx",
+	TP_printk("src=%pISpc dest=%pISpc mark=%#x data_len=%d snd_nxt=%#x snd_una=%#x snd_cwnd=%u ssthresh=%u snd_wnd=%u srtt=%u srtt_pace=%llu min_rtt=%u mrtt_pace=%u mdev_pace=%llu rcv_wnd=%u sock_cookie=%llx classic_ecn=%llu alpha=%llu",
 		  __entry->saddr, __entry->daddr, __entry->mark,
 		  __entry->data_len, __entry->snd_nxt, __entry->snd_una,
 		  __entry->snd_cwnd, __entry->ssthresh, __entry->snd_wnd,
-		  __entry->srtt, __entry->rcv_wnd, __entry->sock_cookie)
+		  __entry->srtt, __entry->srtt_pace, __entry->min_rtt, __entry->mrtt_pace, __entry->mdev_pace, __entry->rcv_wnd, __entry->sock_cookie, __entry->classic_ecn, __entry->alpha)
 );
 
 #endif /* _TRACE_TCP_H */
