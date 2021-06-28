@@ -141,6 +141,10 @@ MODULE_PARM_DESC(prague_burst_shift,
 		 "maximal GSO burst duration as a base-2 negative exponent");
 module_param(prague_burst_shift, uint, 0644);
 
+static u32 prague_max_tso_segs __read_mostly = 0;
+MODULE_PARM_DESC(prague_max_tso_segs, "Maximum TSO/GSO segments");
+module_param(prague_max_tso_segs, uint, 0644);
+
 static u32 prague_rtt_scaling __read_mostly = RTT_CONTROL_RATE;
 MODULE_PARM_DESC(prague_rtt_scaling, "Enable RTT independence through the "
 		 "chosen RTT scaling heuristic");
@@ -663,8 +667,13 @@ static u32 prague_ssthresh(struct sock *sk)
 
 static u32 prague_tso_segs(struct sock *sk, unsigned int mss_now)
 {
-	return max_t(u32, prague_ca(sk)->max_tso_burst,
-		     sock_net(sk)->ipv4.sysctl_tcp_min_tso_segs);
+	u32 tso_segs = max_t(u32, prague_ca(sk)->max_tso_burst,
+			     sock_net(sk)->ipv4.sysctl_tcp_min_tso_segs);
+
+	if (prague_max_tso_segs)
+		tso_segs = min(tso_segs, prague_max_tso_segs);
+
+	return tso_segs;
 }
 
 static size_t prague_get_info(struct sock *sk, u32 ext, int *attr,
