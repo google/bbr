@@ -42,7 +42,7 @@
 #include <linux/inet_diag.h>
 #include "tcp_dctcp.h"
 
-#define DCTCP_ALPHA_SHIFT 10U
+#define DCTCP_ALPHA_SHIFT 20U
 #define DCTCP_MAX_ALPHA	(1U << DCTCP_ALPHA_SHIFT)
 
 struct dctcp {
@@ -119,7 +119,7 @@ static void dctcp_update_alpha(struct sock *sk, u32 flags)
 
 	/* Expired RTT */
 	if (!before(tp->snd_una, ca->next_seq)) {
-		u32 delivered_ce = tp->delivered_ce - ca->old_delivered_ce;
+		u64 delivered_ce = tp->delivered_ce - ca->old_delivered_ce;
 		u32 alpha = ca->dctcp_alpha;
 
 		/* alpha = (1 - g) * alpha + g * F */
@@ -128,13 +128,10 @@ static void dctcp_update_alpha(struct sock *sk, u32 flags)
 		if (delivered_ce) {
 			u32 delivered = tp->delivered - ca->old_delivered;
 
-			/* If dctcp_shift_g == 1, a 32bit value would overflow
-			 * after 8 M packets.
-			 */
 			delivered_ce <<= (DCTCP_ALPHA_SHIFT - dctcp_shift_g);
-			delivered_ce /= max(1U, delivered);
+			delivered_ce = div64_u64(delivered_ce, max(1U, delivered));
 
-			alpha = min(alpha + delivered_ce, DCTCP_MAX_ALPHA);
+			alpha = min(alpha + (u32)delivered_ce, DCTCP_MAX_ALPHA);
 		}
 		/* dctcp_alpha can be read from dctcp_get_info() without
 		 * synchro, so we ask compiler to not use dctcp_alpha
