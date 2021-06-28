@@ -3423,8 +3423,10 @@ void tcp_get_info(struct sock *sk, struct tcp_info *info)
 		info->tcpi_rcv_wscale = tp->rx_opt.rcv_wscale;
 	}
 
-	if (tp->ecn_flags & TCP_ECN_OK)
+	if (tcp_ecn_mode_rfc3168(tp))
 		info->tcpi_options |= TCPI_OPT_ECN;
+	if (tcp_ecn_mode_accecn(tp))
+		info->tcpi_options |= TCPI_OPT_ACCECN;
 	if (tp->ecn_flags & TCP_ECN_SEEN)
 		info->tcpi_options |= TCPI_OPT_ECN_SEEN;
 	if (tp->syn_data_acked)
