@@ -161,6 +161,7 @@ enum {
 	INET_DIAG_SK_BPF_STORAGES,
 	INET_DIAG_CGROUP_ID,
 	INET_DIAG_SOCKOPT,
+	INET_DIAG_PRAGUEINFO,
 	__INET_DIAG_MAX,
 };
 
@@ -231,9 +232,23 @@ struct tcp_bbr_info {
 	__u32	bbr_cwnd_gain;		/* cwnd gain shifted left 8 bits */
 };
 
+/* INET_DIAG_PRAGUEINFO */
+
+struct tcp_prague_info {
+	__u64	prague_alpha;
+	__u64	prague_ai_ack_increase;
+	__u32	prague_max_burst;
+	__u32	prague_round;
+	__u32	prague_rtt_transition;
+	__u32	prague_rtt_indep;
+	__u32	prague_rtt_target;
+	bool	prague_enabled;
+};
+
 union tcp_cc_info {
 	struct tcpvegas_info	vegas;
 	struct tcp_dctcp_info	dctcp;
+	struct tcp_prague_info	prague;
 	struct tcp_bbr_info	bbr;
 };
 #endif /* _UAPI_INET_DIAG_H_ */

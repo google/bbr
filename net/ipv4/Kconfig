@@ -669,6 +669,15 @@ config TCP_CONG_BBR
 	  AQM schemes that do not provide a delay signal. It requires the fq
 	  ("Fair Queue") pacing packet scheduler.
 
+config TCP_CONG_PRAGUE
+	tristate "TCP Prague"
+	default n
+	help
+	  TCP Prague is an enhancement for DCTCP to make DCTCP congestion
+	  control deployable into general Internet.
+
+	  To be completed ...
+
 choice
 	prompt "Default TCP congestion control"
 	default DEFAULT_CUBIC
@@ -706,6 +715,9 @@ choice
 	config DEFAULT_BBR
 		bool "BBR" if TCP_CONG_BBR=y
 
+	config DEFAULT_PRAGUE
+		bool "Prague" if TCP_CONG_PRAGUE=y
+
 	config DEFAULT_RENO
 		bool "Reno"
 endchoice
@@ -730,6 +742,7 @@ config DEFAULT_TCP_CONG
 	default "dctcp" if DEFAULT_DCTCP
 	default "cdg" if DEFAULT_CDG
 	default "bbr" if DEFAULT_BBR
+	default "prague" if DEFAULT_PRAGUE
 	default "cubic"
 
 config TCP_MD5SIG
