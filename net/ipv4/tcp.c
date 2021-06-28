@@ -270,6 +270,7 @@
 
 #include <net/icmp.h>
 #include <net/inet_common.h>
+#include <net/inet_ecn.h>
 #include <net/tcp.h>
 #include <net/mptcp.h>
 #include <net/xfrm.h>
@@ -3489,6 +3490,14 @@ void tcp_get_info(struct sock *sk, struct tcp_info *info)
 	info->tcpi_rcv_ooopack = tp->rcv_ooopack;
 	info->tcpi_snd_wnd = tp->snd_wnd;
 	info->tcpi_fastopen_client_fail = tp->fastopen_client_fail;
+	info->tcpi_received_ce = tp->received_ce;
+	info->tcpi_delivered_e1_bytes = tp->delivered_ecn_bytes[INET_ECN_ECT_1 - 1];
+	info->tcpi_delivered_e0_bytes = tp->delivered_ecn_bytes[INET_ECN_ECT_0 - 1];
+	info->tcpi_delivered_ce_bytes = tp->delivered_ecn_bytes[INET_ECN_CE - 1];
+	info->tcpi_received_e1_bytes = tp->received_ecn_bytes[INET_ECN_ECT_1 - 1];
+	info->tcpi_received_e0_bytes = tp->received_ecn_bytes[INET_ECN_ECT_0 - 1];
+	info->tcpi_received_ce_bytes = tp->received_ecn_bytes[INET_ECN_CE - 1];
+
 	unlock_sock_fast(sk, slow);
 }
 EXPORT_SYMBOL_GPL(tcp_get_info);
