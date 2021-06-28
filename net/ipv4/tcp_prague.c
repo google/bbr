@@ -734,6 +734,11 @@ static void prague_init(struct sock *sk)
 
 	tp->ecn_flags |= TCP_ECN_ECT_1;
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
+	/* If we have an initial RTT estimate, ensure we have an initial pacing
+	 * rate to use if net.ipv4.tcp_pace_iw is set.
+	 */
+	if (tp->srtt_us)
+		prague_update_pacing_rate(sk);
 
 	ca->alpha_stamp = tp->tcp_mstamp;
 	ca->upscaled_alpha = PRAGUE_MAX_ALPHA << PRAGUE_SHIFT_G;
