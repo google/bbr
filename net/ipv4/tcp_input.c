@@ -2896,6 +2896,7 @@ static void tcp_init_cwnd_reduction(struct sock *sk)
 
 void tcp_cwnd_reduction(struct sock *sk, int newly_acked_sacked, int flag)
 {
+	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	int sndcnt = 0;
 	int delta = tp->snd_ssthresh - tcp_packets_in_flight(tp);
@@ -2908,8 +2909,9 @@ void tcp_cwnd_reduction(struct sock *sk, int newly_acked_sacked, int flag)
 		u64 dividend = (u64)tp->snd_ssthresh * tp->prr_delivered +
 			       tp->prior_cwnd - 1;
 		sndcnt = div_u64(dividend, tp->prior_cwnd) - tp->prr_out;
-	} else if ((flag & (FLAG_RETRANS_DATA_ACKED | FLAG_LOST_RETRANS)) ==
-		   FLAG_RETRANS_DATA_ACKED) {
+	} else if (((flag & (FLAG_RETRANS_DATA_ACKED | FLAG_LOST_RETRANS)) ==
+		    FLAG_RETRANS_DATA_ACKED) ||
+		   (icsk->icsk_ca_state == TCP_CA_CWR)) {
 		sndcnt = min_t(int, delta,
 			       max_t(int, tp->prr_delivered - tp->prr_out,
 				     newly_acked_sacked) + 1);
