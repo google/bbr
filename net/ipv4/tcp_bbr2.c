@@ -388,12 +388,12 @@ static bool bbr_usage_based_cwnd;		/* default: disabled */
  * negotiation or configuration that is outside the scope of the BBRv2
  * alpha release.
  */
-static bool bbr_ecn_enable = false;
+static bool bbr_ecn_enable = true;
 
 /* Max RTT (in usec) at which to use sender-side ECN logic.
  * Disabled when 0 (ECN allowed at any RTT).
  */
-static u32 bbr_ecn_max_rtt_us __read_mostly = 5000;
+static u32 bbr_ecn_max_rtt_us __read_mostly = 0;
 
 module_param_named(min_tso_rate,      bbr_min_tso_rate,      int,    0644);
 module_param_named(tso_rtt_shift,     bbr_tso_rtt_shift,     int,    0644);
