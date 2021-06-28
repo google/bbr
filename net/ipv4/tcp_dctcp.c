@@ -42,7 +42,8 @@
 #include <linux/inet_diag.h>
 #include "tcp_dctcp.h"
 
-#define DCTCP_MAX_ALPHA	1024U
+#define DCTCP_ALPHA_SHIFT 10U
+#define DCTCP_MAX_ALPHA	(1U << DCTCP_ALPHA_SHIFT)
 
 struct dctcp {
 	u32 old_delivered;
@@ -107,7 +108,7 @@ static u32 dctcp_ssthresh(struct sock *sk)
 	u32 decr;
 
 	ca->loss_cwnd = tcp_snd_cwnd(tp);
-	decr = ((u64)tcp_snd_cwnd(tp) * ca->dctcp_alpha) >> 11U;
+	decr = ((u64)tcp_snd_cwnd(tp) * ca->dctcp_alpha) >> (DCTCP_ALPHA_SHIFT + 1U);
 	return max(tcp_snd_cwnd(tp) - decr, 2U);
 }
 
@@ -130,7 +131,7 @@ static void dctcp_update_alpha(struct sock *sk, u32 flags)
 			/* If dctcp_shift_g == 1, a 32bit value would overflow
 			 * after 8 M packets.
 			 */
-			delivered_ce <<= (10 - dctcp_shift_g);
+			delivered_ce <<= (DCTCP_ALPHA_SHIFT - dctcp_shift_g);
 			delivered_ce /= max(1U, delivered);
 
 			alpha = min(alpha + delivered_ce, DCTCP_MAX_ALPHA);
