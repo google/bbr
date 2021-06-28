@@ -173,6 +173,7 @@ enum tcp_fastopen_client_fail {
 #define TCPI_OPT_ECN		8 /* ECN was negociated at TCP session init */
 #define TCPI_OPT_ECN_SEEN	16 /* we received at least one packet with ECT */
 #define TCPI_OPT_SYN_DATA	32 /* SYN-ACK acked data in SYN sent or rcvd */
+#define TCPI_OPT_ACCECN		64 /* AccECN negociated at TCP session init */
 
 /*
  * Sender's congestion state indicating normal or abnormal situations
