@@ -711,6 +711,15 @@ static struct ctl_table ipv4_net_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 	{
+		.procname	= "tcp_ecn_unsafe_cep",
+		.data		= &init_net.ipv4.sysctl_tcp_ecn_unsafe_cep,
+		.maxlen		= sizeof(u8),
+		.mode		= 0644,
+		.proc_handler	= proc_dou8vec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
 		.procname	= "ip_dynaddr",
 		.data		= &init_net.ipv4.sysctl_ip_dynaddr,
 		.maxlen		= sizeof(u8),
