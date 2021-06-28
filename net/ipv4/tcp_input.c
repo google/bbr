@@ -661,6 +661,8 @@ static u32 __tcp_accecn_process(struct sock *sk, const struct sk_buff *skb,
 	delta = (corrected_ace - tp->delivered_ce) & TCP_ACCECN_CEP_ACE_MASK;
 	if (delivered_pkts <= TCP_ACCECN_CEP_ACE_MASK)
 		return delta;
+	if (sock_net(sk)->ipv4.sysctl_tcp_ecn_unsafe_cep)
+		return delta;
 
 	safe_delta = delivered_pkts - ((delivered_pkts - delta) & TCP_ACCECN_CEP_ACE_MASK);
 
