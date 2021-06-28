@@ -101,6 +101,26 @@
 #define RTT2US(x)		((x) << RTT_UNIT)
 #define US2RTT(x)		((x) >> RTT_UNIT)
 
+#define PRAGUE_MAX_SRTT_BITS	18U
+#define PRAGUE_MAX_MDEV_BITS	(PRAGUE_MAX_SRTT_BITS+1)
+#define PRAGUE_INIT_MDEV_CARRY	741455 /* 1 << (PRAGUE_MAX_MDEV_BITS+0.5) */
+#define PRAGUE_INIT_ADJ_US	262144 /* 1 << (PRAGUE_MAX_MDEV_BITS-1) */
+
+/* Weights, 1/2^x */
+#define V 1	/* 0.5 */
+#define D 1	/* 0.5 */
+#define S 2	/* 0.25 */
+
+/* Store classic_ecn with same scaling as alpha */
+#define L_STICKY	(16ULL << (PRAGUE_ALPHA_BITS-V))	/* Pure L4S behaviour */
+#define CLASSIC_ECN L_STICKY + \
+	PRAGUE_MAX_ALPHA		/* Transition between classic and L4S */
+#define C_STICKY	CLASSIC_ECN + \
+	L_STICKY			/* Pure classic behaviour */
+
+#define V0_LG	(10014683ULL >> V)	/* reference queue V of ~750us */
+#define D0_LG	(11498458ULL >> D)	/* reference queue D of ~2ms */
+
 /* RTT cwnd scaling heuristics */
 enum {
 	/* No RTT independence */
@@ -135,6 +155,11 @@ MODULE_PARM_DESC(prague_rtt_transition, "Amount of post-SS rounds to transition"
 		 " to be RTT independent.");
 module_param(prague_rtt_transition, uint, 0644);
 
+static int prague_ecn_fallback __read_mostly = 0;
+MODULE_PARM_DESC(prague_ecn_fallback, "0 = none, 1 = detection & fallback"
+		" 2 = detection");
+module_param(prague_ecn_fallback, int, 0644);
+
 struct prague {
 	u64 cwr_stamp;
 	u64 alpha_stamp;	/* EWMA update timestamp */
@@ -144,6 +169,8 @@ struct prague {
 	s64 loss_cwnd_cnt;
 	u32 loss_cwnd;
 	u32 max_tso_burst;
+	u32 rest_depth_us;
+	u32 rest_mdev_us;
 	u32 old_delivered;	/* tp->delivered at round start */
 	u32 old_delivered_ce;	/* tp->delivered_ce at round start */
 	u32 next_seq;		/* tp->snd_nxt at round start */
@@ -316,6 +343,59 @@ static void prague_cwnd_changed(struct sock *sk)
 	prague_ai_ack_increase(sk);
 }
 
+/* TODO(asadsa): move this detection out of prague to make it more generic. */
+/* TODO(asadsa): check if self-limited works as given out in the design */
+static void prague_classic_ecn_detection(struct sock *sk)
+{
+	struct prague *ca = prague_ca(sk);
+	struct tcp_sock *tp = tcp_sk(sk);
+	u32 min_rtt_us = tcp_min_rtt(tp);
+	u32 g_srtt_shift = tp->g_srtt_shift;
+	u32 g_mdev_shift = tp->g_mdev_shift;
+	u64 srtt_us = tp->srtt_pace_us >> g_srtt_shift;
+	u64 mdev_us = tp->mdev_pace_us >> g_mdev_shift;
+	u64 depth_us;
+	u32 mdev_lg, depth_lg;
+	u32 adj_us = PRAGUE_INIT_ADJ_US >> (PRAGUE_MAX_MDEV_BITS - g_mdev_shift);
+	s64 new_classic_ecn = (s64)tp->classic_ecn;
+
+	if (unlikely(!srtt_us) || unlikely(min_rtt_us == ~0U))
+		return;
+
+	/* Multiply upscaled mdev by upscaled geometric carry from the previous round
+	 *  adding upscaled adjustment to unbias the subsequent integer log
+	 */
+	mdev_us = (u64)mdev_us * ca->rest_mdev_us + adj_us;
+	mdev_lg = max_t(u32, ilog2(mdev_us), g_mdev_shift) - g_mdev_shift;
+	/* carry the new rest to the next round */
+	ca->rest_mdev_us = mdev_us >> mdev_lg;
+	/* V*lg(mdev_us/VO) */
+	mdev_lg <<= PRAGUE_ALPHA_BITS - V;
+	new_classic_ecn += (s64)mdev_lg - V0_LG;
+
+	if (unlikely(srtt_us <= min_rtt_us))
+		goto out;
+
+	depth_us = (srtt_us - min_rtt_us) * ca->rest_depth_us + (adj_us >> 1);
+	depth_lg = max_t(u32, ilog2(depth_us), g_srtt_shift) - g_srtt_shift;
+	ca->rest_depth_us = depth_us >> depth_lg;
+	/* queue build-up can only bring classic_ecn toward more classic */
+	/* + D*lg(max(d/D0, 1)) */
+	depth_lg <<= PRAGUE_ALPHA_BITS - D;
+	if (depth_lg > D0_LG) {
+		new_classic_ecn += (u64)depth_lg - D0_LG;
+	}
+
+	/* self-limited? */
+	//if (!tcp_is_cwnd_limited(sk))
+	//	/* - S*s */
+	//	new_classic_ecn -= PRAGUE_MAX_ALPHA -
+	//	(tp->snd_cwnd_used << (PRAGUE_ALPHA_BITS-S)) / tp->snd_cwnd;
+
+out:
+	tp->classic_ecn = min_t(u64, max_t(s64, new_classic_ecn, 0), C_STICKY);
+}
+
 static void prague_update_alpha(struct sock *sk)
 {
 	struct prague *ca = prague_ca(sk);
@@ -328,6 +408,8 @@ static void prague_update_alpha(struct sock *sk)
 	if (unlikely(!ca->saw_ce))
 		goto skip;
 
+	if (prague_ecn_fallback > 0)
+		prague_classic_ecn_detection(sk);
 
 	alpha = ca->upscaled_alpha;
 	ecn_segs = tp->delivered_ce - ca->old_delivered_ce;
@@ -348,9 +430,10 @@ static void prague_update_alpha(struct sock *sk)
 	}
 	alpha = alpha - (alpha >> PRAGUE_SHIFT_G) + ecn_segs;
 	ca->alpha_stamp = tp->tcp_mstamp;
+	alpha = min(PRAGUE_MAX_ALPHA << PRAGUE_SHIFT_G, alpha);
 
-	WRITE_ONCE(ca->upscaled_alpha,
-		   min(PRAGUE_MAX_ALPHA << PRAGUE_SHIFT_G, alpha));
+	WRITE_ONCE(ca->upscaled_alpha, alpha);
+	tp->alpha = alpha >> PRAGUE_SHIFT_G;
 
 skip:
 	prague_new_round(sk);
@@ -427,6 +510,48 @@ static void prague_enter_loss(struct sock *sk)
 	prague_cwnd_changed(sk);
 }
 
+static void prague_update_rtt_scaling(struct sock *sk, u32 ssthresh)
+{
+	struct prague *ca = prague_ca(sk);
+	struct tcp_sock *tp = tcp_sk(sk);
+	int delta_shift;
+	u8 new_g_srtt_shift;
+	u8 old_g_srtt_shift = tp->g_srtt_shift;
+
+	new_g_srtt_shift = ilog2(ssthresh);
+	new_g_srtt_shift += (new_g_srtt_shift >> 1) + 1;
+	tp->g_srtt_shift = min_t(u8, new_g_srtt_shift, PRAGUE_MAX_SRTT_BITS);
+	tp->g_mdev_shift = tp->g_srtt_shift + 1;
+	delta_shift = tp->g_srtt_shift - old_g_srtt_shift;
+
+	if (!delta_shift)
+		return;
+
+	if (delta_shift > 0) {
+		tp->srtt_pace_us <<= delta_shift;
+		tp->mdev_pace_us <<= delta_shift;
+		ca->rest_depth_us <<= delta_shift;
+		ca->rest_mdev_us <<= delta_shift;
+	} else {
+		delta_shift = -delta_shift;
+		tp->srtt_pace_us >>= delta_shift;
+		tp->mdev_pace_us >>= delta_shift;
+		ca->rest_depth_us >>= delta_shift;
+		ca->rest_mdev_us >>= delta_shift;
+	}
+}
+
+static u64 prague_classic_ecn_fallback(struct tcp_sock *tp, u64 alpha)
+{
+	u64 c = min(tp->classic_ecn, CLASSIC_ECN) - L_STICKY;
+	/* 0 ... CLASSIC_ECN/PRAGUE_MAX_ALPHA */
+	c = (c >> 1) + (c >> 3); /* c * ~0.6 */
+
+
+	/* clamp alpha no lower than c to compete fair with classic AQMs */
+	return max(alpha, c);
+}
+
 static void prague_enter_cwr(struct sock *sk)
 {
 	struct prague *ca = prague_ca(sk);
@@ -440,6 +565,10 @@ static void prague_enter_cwr(struct sock *sk)
 		return;
 	ca->cwr_stamp = tp->tcp_mstamp;
 	alpha = ca->upscaled_alpha >> PRAGUE_SHIFT_G;
+
+	if (prague_ecn_fallback == 1 && tp->classic_ecn > L_STICKY)
+		alpha = prague_classic_ecn_fallback(tp, alpha);
+
 	reduction = (alpha * ((u64)tp->snd_cwnd << CWND_UNIT) +
 			 /* Unbias the rounding by adding 1/2 */
 			 PRAGUE_MAX_ALPHA) >>
@@ -447,6 +576,40 @@ static void prague_enter_cwr(struct sock *sk)
 	ca->cwnd_cnt -= reduction;
 
 	return;
+}
+
+/* Calculate SRTT & SMDEV with lower gain to see past instantaneous variation.
+ * Also use accurate RTT measurement of last segment to do Classic ECN detection
+ * rather than using RFC6298 which includes delay accumulated between two
+ * successive segments at the receiver. Finally, we do not use this MDEV for RTO
+ * so initialize it to zero. We use a tweaked version of tcp_rtt_estimator().
+ */
+static void prague_rtt_estimator(struct sock *sk, long mrtt_us)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+	long long m = mrtt_us; /* Accurate RTT */
+	u64 srtt_pace = tp->srtt_pace_us;
+	tp->mrtt_pace_us = mrtt_us;
+
+	if (srtt_pace != 0) {
+		m -= (srtt_pace >> tp->g_srtt_shift);	/* m is now error in rtt est */
+		srtt_pace += m;		/* rtt += 1/2^g_srtt_shift new */
+		if (m < 0)
+			m = -m;		/* m is now abs(error) */
+		m -= (tp->mdev_pace_us >> tp->g_mdev_shift);
+		tp->mdev_pace_us += m;		/* mdev += 1/2^g_mev_shift new */
+	} else {
+		/* no previous measure. */
+		srtt_pace = m << tp->g_srtt_shift;	/* take the measured time to be rtt */
+		tp->mdev_pace_us = 1ULL << tp->g_mdev_shift;
+	}
+	tp->srtt_pace_us = max(1ULL, srtt_pace);
+}
+
+static void prague_pkts_acked(struct sock *sk, const struct ack_sample *sample)
+{
+	if (sample->rtt_us != -1)
+		prague_rtt_estimator(sk, sample->rtt_us);
 }
 
 static void prague_state(struct sock *sk, u8 new_state)
@@ -494,6 +657,7 @@ static u32 prague_ssthresh(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
+	prague_update_rtt_scaling(sk, tp->snd_ssthresh);
 	return tp->snd_ssthresh;
 }
 
@@ -577,6 +741,18 @@ static void prague_init(struct sock *sk)
 	LOG(sk, "RTT indep chosen: %d (after %u rounds), targetting %u usec",
 	    ca->rtt_indep, ca->rtt_transition_delay, prague_target_rtt(sk));
 	ca->saw_ce = !!tp->delivered_ce;
+
+	/* reuse existing meaurement of SRTT as an intial starting point */
+	tp->g_srtt_shift = PRAGUE_MAX_SRTT_BITS;
+	tp->g_mdev_shift = PRAGUE_MAX_MDEV_BITS;
+	tp->mrtt_pace_us = tp->srtt_us >> 3;
+	tp->srtt_pace_us = (u64)tp->mrtt_pace_us << tp->g_srtt_shift;
+	tp->mdev_pace_us = 1ULL << tp->g_mdev_shift;
+	ca->rest_mdev_us = PRAGUE_INIT_MDEV_CARRY;
+	ca->rest_depth_us = PRAGUE_INIT_MDEV_CARRY >> 1;
+
+	tp->classic_ecn = 0ULL;
+	tp->alpha = PRAGUE_MAX_ALPHA;		/* Used ONLY to log alpha */
 
 	prague_new_round(sk);
 }
@@ -666,6 +842,7 @@ static struct tcp_congestion_ops prague __read_mostly = {
 	.cwnd_event	= prague_cwnd_event,
 	.ssthresh	= prague_ssthresh,
 	.undo_cwnd	= prague_cwnd_undo,
+	.pkts_acked	= prague_pkts_acked,
 	.set_state	= prague_state,
 	.get_info	= prague_get_info,
 	.tso_segs	= prague_tso_segs,
