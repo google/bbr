@@ -430,7 +430,8 @@ bool tcp_accecn_validate_syn_feedback(struct sock *sk, u8 ace, u8 sent_ect)
 }
 
 /* See Table 2 of the AccECN draft */
-static void tcp_ecn_rcv_synack(struct sock *sk, const struct tcphdr *th,
+static void tcp_ecn_rcv_synack(struct sock *sk, const struct sk_buff *skb,
+			       const struct tcphdr *th,
 			       u8 ip_dsfield)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -450,7 +451,12 @@ static void tcp_ecn_rcv_synack(struct sock *sk, const struct tcphdr *th,
 	default:
 		tcp_ecn_mode_set(tp, TCP_ECN_MODE_ACCECN);
 		tp->syn_ect_rcv = ip_dsfield & INET_ECN_MASK;
-		tp->accecn_opt_demand = 2;
+		if (tp->rx_opt.accecn &&
+		    tp->saw_accecn_opt < TCP_ACCECN_OPT_COUNTER_SEEN) {
+			tp->saw_accecn_opt = tcp_accecn_option_init(skb,
+								    tp->rx_opt.accecn);
+			tp->accecn_opt_demand = 2;
+		}
 		if (tcp_accecn_validate_syn_feedback(sk, ace, tp->syn_ect_snt) &&
 		    INET_ECN_is_ce(ip_dsfield)) {
 			tp->received_ce++;
@@ -538,7 +544,19 @@ static bool tcp_accecn_process_option(struct tcp_sock *tp,
 	bool order, res;
 	unsigned int i;
 
+	if (tp->saw_accecn_opt == TCP_ACCECN_OPT_FAIL)
+		return false;
+
 	if (!(flag & FLAG_SLOWPATH) || !tp->rx_opt.accecn) {
+		if (!tp->saw_accecn_opt) {
+			/* Too late to enable after this point due to
+			 * potential counter wraps
+			 */
+			if (tp->bytes_sent >= (1 << 23) - 1)
+				tp->saw_accecn_opt = TCP_ACCECN_OPT_FAIL;
+			return false;
+		}
+
 		if (estimate_ecnfield) {
 			tp->delivered_ecn_bytes[estimate_ecnfield - 1] += delivered_bytes;
 			return true;
@@ -552,6 +570,10 @@ static bool tcp_accecn_process_option(struct tcp_sock *tp,
 	ptr += 2;
 	order = get_unaligned_be16(ptr) == TCPOPT_ACCECN1_MAGIC;
 	ptr += 2;
+
+	if (tp->saw_accecn_opt < TCP_ACCECN_OPT_COUNTER_SEEN)
+		tp->saw_accecn_opt = tcp_accecn_option_init(skb,
+							    tp->rx_opt.accecn);
 
 	res = !!estimate_ecnfield;
 	for (i = 0; i < 3; i++) {
@@ -6009,7 +6031,12 @@ static bool tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 	if (th->syn) {
 		if (tcp_ecn_mode_accecn(tp)) {
 			send_accecn_reflector = true;
-			tp->accecn_opt_demand = max_t(u8, 1, tp->accecn_opt_demand);
+			if (tp->rx_opt.accecn &&
+			    tp->saw_accecn_opt < TCP_ACCECN_OPT_COUNTER_SEEN) {
+				tp->saw_accecn_opt = tcp_accecn_option_init(skb,
+									    tp->rx_opt.accecn);
+				tp->accecn_opt_demand = max_t(u8, 1, tp->accecn_opt_demand);
+			}
 		}
 syn_challenge:
 		if (syn_inerr)
@@ -6459,7 +6486,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 		 */
 
 		if (tcp_ecn_mode_any(tp))
-			tcp_ecn_rcv_synack(sk, th, TCP_SKB_CB(skb)->ip_dsfield);
+			tcp_ecn_rcv_synack(sk, skb, th, TCP_SKB_CB(skb)->ip_dsfield);
 
 		tcp_init_wl(tp, TCP_SKB_CB(skb)->seq);
 		tcp_try_undo_spurious_syn(sk);
@@ -6986,6 +7013,7 @@ static void tcp_openreq_init(struct request_sock *req,
 	tcp_rsk(req)->snt_synack = 0;
 	tcp_rsk(req)->last_oow_ack_time = 0;
 	tcp_rsk(req)->accecn_ok = 0;
+	tcp_rsk(req)->saw_accecn_opt = 0;
 	tcp_rsk(req)->syn_ect_rcv = 0;
 	tcp_rsk(req)->syn_ect_snt = 0;
 	req->mss = rx_opt->mss_clamp;

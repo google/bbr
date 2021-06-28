@@ -127,6 +127,7 @@ struct tcp_request_sock {
 	bool				drop_req;
 #endif
 	u8				accecn_ok  : 1,
+					saw_accecn_opt : 2,
 					syn_ect_snt: 2,
 					syn_ect_rcv: 2;
 	u32				txhash;
@@ -231,6 +232,7 @@ struct tcp_sock {
 		tlp_retrans:1,	/* TLP is a retransmission */
 		syn_ect_snt:2,	/* AccECN ECT memory, only */
 		syn_ect_rcv:2,	/* ... needed durign 3WHS + first seqno */
+		saw_accecn_opt:2,    /* An AccECN option was seen */
 		ecn_fail:1;	/* ECN reflector detected path mangling */
 	u32	chrono_start;	/* Start time in jiffies of a TCP chrono */
 	u32	chrono_stat[3];	/* Time in jiffies for chrono_stat stats */
