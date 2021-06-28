@@ -439,6 +439,26 @@ config NET_SCH_ETS
 
 	  If unsure, say N.
 
+config NET_SCH_DUALPI2
+	tristate "Dual Queue Proportional Integral Controller Improved with a Square (DUALPI2) scheduler"
+	help
+	  Say Y here if you want to use the DualPI2 AQM.
+	  This is a combination of the DUALQ Coupled-AQM with a PI2 base-AQM.
+	  The PI2 AQM is in turn both an extension and a simplification of the
+	  PIE AQM. PI2 makes quite some PIE heuristics unnecessary, while being
+	  able to control scalable congestion controls like DCTCP and
+	  TCP-Prague. With PI2, both Reno/Cubic can be used in parallel with
+	  DCTCP, maintaining window fairness. DUALQ provides latency separation
+	  between low latency DCTCP flows and Reno/Cubic flows that need a
+	  bigger queue.
+	  For more information, please see
+	  https://www.ietf.org/id/draft-ietf-tsvwg-aqm-dualq-coupled
+
+	  To compile this code as a module, choose M here: the module
+	  will be called sch_dualpi2.
+
+	  If unsure, say N.
+
 menuconfig NET_SCH_DEFAULT
 	bool "Allow override default queue discipline"
 	help
@@ -448,7 +468,7 @@ menuconfig NET_SCH_DEFAULT
 	  of pfifo_fast will be used. Many distributions already set
 	  the default value via /proc/sys/net/core/default_qdisc.
 
-	  If unsure, say N.
+
 
 if NET_SCH_DEFAULT
 
