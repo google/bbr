@@ -1,0 +1,84 @@
+name: Build deb package
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Download apt-get dependencies
+      run: |
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get -y purge unattended-upgrades
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get -y update
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get -y install fakeroot \
+            libelf-dev libssl-dev flex bison coreutils build-essential \
+            xz-utils devscripts initramfs-tools wget linux-headers-5.8.0-50-generic
+    - name: Kernel config
+      run: |
+        cp /usr/src/linux-headers-5.8.0-50-generic/.config .
+        scripts/config --disable DEBUG_INFO \
+                       --set-str SYSTEM_TRUSTED_KEYS "" \
+                       --module CONFIG_TCP_CONG_PRAGUE \
+                       --module CONFIG_TCP_CONG_BBR \
+                       --module CONFIG_TCP_CONG_BBR2 \
+                       --module CONFIG_TCP_CONG_DCTCP \
+                       --module CONFIG_NET_IPIP \
+                       --module CONFIG_NET_CLS_U32 \
+                       --module CONFIG_NET_SCH_DUALPI2 \
+                       --module CONFIG_NET_SCH_PIE \
+                       --module CONFIG_NET_SCH_FQ \
+                       --module CONFIG_NET_SCH_FQ_CODEL \
+                       --module CONFIG_NET_SCH_CODEL \
+                       --module CONFIG_NET_SCH_RED \
+                       --module CONFIG_NET_SCH_CAKE \
+                       --module CONFIG_NET_SCH_HTB \
+                       --module CONFIG_NET_SCH_NETEM \
+                       --module CONFIG_NET_SCH_INGRESS \
+                       --module CONFIG_NET_ACT_MIRRED \
+                       --module CONFIG_IFB \
+                       --module CONFIG_VETH \
+                       --module CONFIG_BRIDGE \
+                       --module CONFIG_INET_DIAG
+        make olddefconfig
+    - name: make-deb
+      run: make -j$(nproc) bindeb-pkg \
+            LOCALVERSION=-$(git rev-parse --short HEAD)-prague-${GITHUB_RUN_NUMBER} \
+            KDEB_PKGVERSION=1
+    - name: Move artifacts
+      run: |
+        mkdir -p debian_build
+        mv -t debian_build ../linux-*.deb
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: prague-kernel
+        path: debian_build
+
+  release:
+    name: Release build artifacts for the testing branch
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/testing'
+    steps:
+    - name: Get artifact
+      uses: actions/download-artifact@v2
+      with:
+        name: prague-kernel
+    - name: Include iproute2 into the pre-release archive
+      run: |
+          wget https://github.com/L4STeam/iproute2/releases/download/master-build/iproute2-l4s.zip
+          unzip iproute2-l4s
+          mv -t . iproute2-l4s/*.deb
+    - name: Zip artifacts
+      run: zip -r l4s-testing.zip *.deb
+    - name: Release tip build
+      uses: eine/tip@master
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: testing-build
+        files: |
+          l4s-testing.zip
