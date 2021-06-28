@@ -229,6 +229,7 @@ void tcp_time_wait(struct sock *sk, int state, int timeo);
 					 TCPOLEN_ACCECN_PERFIELD * \
 					 TCP_ACCECN_NUMFIELDS)
 #define TCP_ACCECN_BEACON_FREQ_SHIFT	2 /* Send option at least 2^2 times per RTT */
+#define TCP_ACCECN_SAFETY_SHIFT	1	/* SAFETY_FACTOR in accecn draft */
 
 /* tp->saw_accecn_opt states */
 #define TCP_ACCECN_OPT_EMPTY_SEEN	0x1
