@@ -1312,6 +1312,13 @@ static struct ctl_table ipv4_net_table[] = {
 		.extra2		= &thousand,
 	},
 	{
+		.procname	= "tcp_pace_iw",
+		.data		= &init_net.ipv4.sysctl_tcp_pace_iw,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
+	{
 		.procname	= "tcp_wmem",
 		.data		= &init_net.ipv4.sysctl_tcp_wmem,
 		.maxlen		= sizeof(init_net.ipv4.sysctl_tcp_wmem),
