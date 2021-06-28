@@ -845,6 +845,14 @@ tcp_pacing_ca_ratio - INTEGER
 
 	Default: 120
 
+tcp_pace_iw - INTEGER
+	Whether TCP should attempt to pace its initial window.
+
+	- 0: No IW pacing.
+	- 1: IW pacing if CC sets pacing rate.
+
+	Default: 0
+
 tcp_tso_win_divisor - INTEGER
 	This allows control over what percentage of the congestion window
 	can be consumed by a single TSO frame.
