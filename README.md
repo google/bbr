@@ -17,6 +17,14 @@ External links:
 
 # How To Get Started with packetdrill
 
+First, download the dependencies that you will need in order to build and run
+packetdrill. If you are on a Linux system based on Debian/Ubuntu then you can
+use a command like:
+
+```
+sudo apt install git gcc make bison flex python
+```
+
 To check out and build packetdrill:
 
 ```
