@@ -1,0 +1,22 @@
+// Test RFC3168 ECN simultaneous open
+
+`../../common/defaults.sh
+sysctl -q net.ipv4.tcp_ecn=1
+sysctl -q net.ipv4.tcp_timestamps=0
+`
+
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 4
++.002 ... 0.095 connect(4, ..., ...) = 0
+
++.002 > SEW 0:0(0) <mss 1460,nop,nop,sackOK,nop,wscale 8>
+
++0.02 < SEW 0:0(0) win 32767 <mss 1050,sackOK,nop,nop,nop,wscale 8>
++.002 > SE. 0:0(0) ack 1 <mss 1460,nop,nop,sackOK,nop,wscale 8>
+
++0.05 < SE. 0:0(0) ack 1 win 32767 <mss 1050,sackOK,nop,nop,nop,wscale 8>
++.002 > . 1:1(0) ack 1
+
+ +.02 < . 1:1(0) ack 1 win 256
+
+ +1 write(4, ..., 1000) = 1000
++.002 > [ect0] P. 1:1001(1000) ack 1

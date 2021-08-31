@@ -44,7 +44,7 @@ sysctl -q net.ipv4.tcp_tso_win_divisor=3
 
 # TCP Explicit Congestion Notification (ECN)
 sysctl -q net.ipv4.tcp_ecn=0
-sysctl -q net.ipv4.tcp_ecn_option=1
+sysctl -q net.ipv4.tcp_ecn_option=2
 
 sysctl -q net.ipv4.tcp_pacing_ss_ratio=200
 sysctl -q net.ipv4.tcp_pacing_ca_ratio=120
