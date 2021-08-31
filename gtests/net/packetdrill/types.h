@@ -190,6 +190,11 @@ static inline bool is_valid_u20(s64 x)
 	return (x >= 0) && (x <= 0xfffff);
 }
 
+static inline bool is_valid_u24(s64 x)
+{
+	return (x >= 0) && (x <= 0xffffff);
+}
+
 static inline s64 max(s64 a, s64 b)
 {
 	return (a > b) ? a : b;

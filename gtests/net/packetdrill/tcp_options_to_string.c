@@ -72,6 +72,42 @@ static int tcp_fast_open_option_to_string(FILE *s, struct tcp_option *option,
 	return STATUS_OK;
 }
 
+char *tcp_accecn_option_counter_label[2][MAX_TCP_ACCECN_COUNTERS] = {
+	{ "e0b", "ceb", "e1b" },
+	{ "e1b", "ceb", "e0b" }
+};
+
+static int tcp_accecn_option_to_string(FILE *s, struct tcp_option *option,
+				       bool exp)
+{
+	u16 magic;
+	int order;
+
+	if (exp && (option->length < TCPOLEN_EXP_ACCECN_BASE))
+		return STATUS_ERR;
+
+	magic = ntohs(option->data.accecn_exp.magic);
+	if (magic != TCPOPT_ACCECN0_MAGIC && magic != TCPOPT_ACCECN1_MAGIC)
+		return STATUS_ERR;
+	order = magic == TCPOPT_ACCECN0_MAGIC ? 0 : 1;
+
+	fprintf(s, "AccECNEXP%u", order);
+	int counter_bytes = option->length - TCPOLEN_EXP_ACCECN_BASE;
+	assert(counter_bytes >= 0);
+	assert(counter_bytes <= MAX_TCP_ACCECN_COUNTERS *
+				sizeof(struct accecn_counter));
+
+	int i;
+	for (i = 0; i < MAX_TCP_ACCECN_COUNTERS; ++i) {
+		if (counter_bytes < sizeof(struct accecn_counter))
+			break;
+		fprintf(s, " %s %u", tcp_accecn_option_counter_label[order][i],
+			ntohl(option->data.accecn_exp.counter[i].bytes) >> 8);
+		counter_bytes -= sizeof(struct accecn_counter);
+	}
+	return STATUS_OK;
+}
+
 int tcp_options_to_string(struct packet *packet,
 				  char **ascii_string, char **error)
 {
@@ -141,12 +177,13 @@ int tcp_options_to_string(struct packet *packet,
 			break;
 
 		case TCPOPT_EXP:
-			if (tcp_fast_open_option_to_string(s, option, true)) {
-				asprintf(error,
-					 "unknown experimental option");
-				goto out;
-			}
-			break;
+			if (!tcp_fast_open_option_to_string(s, option, true))
+				break;
+			if (!tcp_accecn_option_to_string(s, option, true))
+				break;
+
+			asprintf(error, "unknown experimental option");
+			goto out;
 
 		default:
 			asprintf(error, "unexpected TCP option kind: %u",

@@ -439,6 +439,42 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 	return option;
 }
 
+int accecn_counter_order[2][MAX_TCP_ACCECN_COUNTERS] = {
+	{IP_ECN_ECT0, IP_ECN_CE, IP_ECN_ECT1},
+	{IP_ECN_ECT1, IP_ECN_CE, IP_ECN_ECT0},
+};
+
+static struct tcp_option *new_tcp_accecn_option(struct tcp_accecn_counters *cnts,
+						char **error, bool exp)
+{
+	struct tcp_option *option;
+	int counters = 0;
+	u8 option_bytes;
+	int i;
+	int order = cnts->first == IP_ECN_ECT0 ? 0 : 1;
+	int *counter_order = accecn_counter_order[order];
+
+	for (i = 0; i < MAX_TCP_ACCECN_COUNTERS; i++) {
+		if (cnts->present & (1 << counter_order[i]))
+			counters = i + 1;
+		else
+			cnts->counter[counter_order[i]] = 0;
+	}
+	option_bytes = counters * sizeof(struct accecn_counter) +
+				TCPOLEN_EXP_ACCECN_BASE;
+	option = tcp_option_new(TCPOPT_EXP, option_bytes);
+	if (exp)
+		option->data.accecn_exp.magic = htons(cnts->first == IP_ECN_ECT0 ?
+						      TCPOPT_ACCECN0_MAGIC :
+						      TCPOPT_ACCECN1_MAGIC);
+
+	for (i = 0; i < counters; i++) {
+		u32 val = cnts->counter[counter_order[i]];
+		option->data.accecn_exp.counter[i].bytes = htonl(val << 8);
+	}
+	return option;
+}
+
 static struct tcp_option *new_md5_option(const char *digest_string,
 					 char **error)
 {
@@ -516,6 +552,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 	struct code_spec *code;
 	struct tcp_option *tcp_option;
 	struct tcp_options *tcp_options;
+	struct tcp_accecn_counters tcp_accecn_counters;
 	struct expression *expression;
 	struct expression_list *expression_list;
 	struct errno_spec *errno_info;
@@ -536,7 +573,8 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %token <reserved> FD EVENTS REVENTS ONOFF LINGER
 %token <reserved> U32 U64 PTR
 %token <reserved> ACK ECR EOL MSS NOP SACK SACKOK TIMESTAMP VAL WIN WSCALE
-%token <reserved> URG MD5 FAST_OPEN FAST_OPEN_EXP
+%token <reserved> URG MD5 FAST_OPEN FAST_OPEN_EXP ACCECN_EXP0 ACCECN_EXP1
+%token <reserved> ACCECN_E0B ACCECN_E1B ACCECN_CEB
 %token <reserved> TOS FLAGS FLOWLABEL
 %token <reserved> ECT0 ECT1 CE ECT01 NO_ECN
 %token <reserved> IPV4 IPV6 ICMP UDP RAW GRE MTU ID
@@ -552,7 +590,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <direction> direction
 %type <ip_info> ip_info opt_ip_info
 %type <tos_spec> tos_spec
-%type <ip_ecn> ip_ecn
+%type <ip_ecn> ip_ecn accecn_counter_id
 %type <option> option options opt_options
 %type <event> event events event_time action
 %type <time_usecs> time opt_end_time
@@ -580,6 +618,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <tcp_sequence_info> seq opt_icmp_echoed
 %type <tcp_options> opt_tcp_options tcp_option_list
 %type <tcp_option> tcp_option sack_block_list sack_block
+%type <tcp_accecn_counters> accecn_exp_option accecn_counter_list accecn_counter
 %type <string> function_name
 %type <expression_list> expression_list function_arguments
 %type <expression> expression binary_expression array sub_expr_list
@@ -1333,6 +1372,27 @@ tcp_option
 		free(error);
 	}
 }
+| accecn_exp_option {
+	char *error = NULL;
+	$$ = new_tcp_accecn_option(&$1, &error, true);
+
+	if ($$ == NULL) {
+		assert(error != NULL);
+		semantic_error(error);
+		free(error);
+	}
+}
+;
+
+accecn_exp_option
+: ACCECN_EXP0 accecn_counter_list {
+	$$ = $2;
+	$$.first = IP_ECN_ECT0;
+}
+| ACCECN_EXP1 accecn_counter_list {
+	$$ = $2;
+	$$.first = IP_ECN_ECT1;
+}
 ;
 
 sack_block_list
@@ -1363,6 +1423,34 @@ sack_block
 	$$->data.sack.block[0].left = htonl($1);
 	$$->data.sack.block[0].right = htonl($3);
 }
+;
+
+accecn_counter_list
+: accecn_counter		     { $$ = $1; }
+| accecn_counter_list accecn_counter {
+	$$.present = ($1.present | $2.present);
+	for (int i = IP_ECN_ECT1; i <= IP_ECN_CE; i++) {
+		if ($1.present & (1 << i))
+			$$.counter[i] = $1.counter[i];
+		if ($2.present & (1 << i))
+			$$.counter[i] = $2.counter[i];
+	}
+};
+
+accecn_counter
+: accecn_counter_id INTEGER {
+	if (!is_valid_u24($2)) {
+		semantic_error("TCP AccECN counter out of range");
+	}
+	$$.present = 1 << $1;
+	$$.counter[$1] = $2;
+}
+;
+
+accecn_counter_id
+: ACCECN_E0B { $$ = IP_ECN_ECT0; }
+| ACCECN_CEB { $$ = IP_ECN_CE; }
+| ACCECN_E1B { $$ = IP_ECN_ECT1; }
 ;
 
 syscall_spec
