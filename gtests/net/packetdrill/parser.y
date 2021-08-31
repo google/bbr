@@ -439,6 +439,47 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 	return option;
 }
 
+const int accecn_field_order[2][MAX_TCP_ACCECN_FIELDS] = {
+	{IP_ECN_ECT0, IP_ECN_CE, IP_ECN_ECT1},
+	{IP_ECN_ECT1, IP_ECN_CE, IP_ECN_ECT0},
+};
+
+static struct tcp_option *new_tcp_accecn_option(struct tcp_accecn_fields *cnts,
+						char **error, bool exp)
+{
+	struct tcp_option *option = NULL;
+	u8 option_bytes = 0, option_kind = 0;
+	const int *field_order = NULL;
+	int num_fields = 0;
+	int i = 0, order = 0;
+
+	if (cnts->first == IP_ECN_ECT0) {
+		order = 0;
+		option_kind = TCPOPT_ACCECN0;
+	} else {
+		order = 1;
+		option_kind = TCPOPT_ACCECN1;
+	}
+	field_order = accecn_field_order[order];
+
+	for (i = 0; i < MAX_TCP_ACCECN_FIELDS; i++) {
+		if (cnts->present & (1 << field_order[i]))
+			num_fields = i + 1;
+		else
+			cnts->field[field_order[i]] = 0;
+	}
+	option_bytes = num_fields * sizeof(struct accecn_field) +
+		       TCPOLEN_ACCECN_BASE;
+	option = tcp_option_new(option_kind, option_bytes);
+
+	for (i = 0; i < num_fields; i++) {
+		const u32 val = cnts->field[field_order[i]];
+
+		option->data.accecn.field[i].bytes = htonl(val << 8);
+	}
+	return option;
+}
+
 static struct tcp_option *new_md5_option(const char *digest_string,
 					 char **error)
 {
@@ -516,6 +557,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 	struct code_spec *code;
 	struct tcp_option *tcp_option;
 	struct tcp_options *tcp_options;
+	struct tcp_accecn_fields tcp_accecn_fields;
 	struct expression *expression;
 	struct expression_list *expression_list;
 	struct errno_spec *errno_info;
@@ -536,7 +578,8 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %token <reserved> FD EVENTS REVENTS ONOFF LINGER
 %token <reserved> U32 U64 PTR
 %token <reserved> ACK ECR EOL MSS NOP SACK SACKOK TIMESTAMP VAL WIN WSCALE
-%token <reserved> URG MD5 FAST_OPEN FAST_OPEN_EXP
+%token <reserved> URG MD5 FAST_OPEN FAST_OPEN_EXP ACCECN
+%token <reserved> ACCECN_E0B ACCECN_E1B ACCECN_CEB
 %token <reserved> TOS FLAGS FLOWLABEL
 %token <reserved> ECT0 ECT1 CE ECT01 NO_ECN
 %token <reserved> IPV4 IPV6 ICMP UDP RAW GRE MTU ID
@@ -569,6 +612,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <integer> gre_sum gre_off gre_key gre_seq
 %type <integer> opt_icmp_echo_id
 %type <integer> flow_label
+%type <integer> accecn_val
 %type <string> icmp_type opt_icmp_code opt_ack_flag opt_word ack_and_ace flags
 %type <string> opt_tcp_fast_open_cookie hex_blob
 %type <string> opt_note note word_list
@@ -580,6 +624,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <tcp_sequence_info> seq opt_icmp_echoed
 %type <tcp_options> opt_tcp_options tcp_option_list
 %type <tcp_option> tcp_option sack_block_list sack_block
+%type <tcp_accecn_fields> accecn_option
 %type <string> function_name
 %type <expression_list> expression_list function_arguments
 %type <expression> expression binary_expression array sub_expr_list
@@ -1333,6 +1378,55 @@ tcp_option
 		free(error);
 	}
 }
+| accecn_option {
+	char *error = NULL;
+	$$ = new_tcp_accecn_option(&$1, &error, true);
+
+	if ($$ == NULL) {
+		assert(error != NULL);
+		semantic_error(error);
+		free(error);
+	}
+}
+;
+
+accecn_option
+: ACCECN ACCECN_E0B accecn_val {
+	$$.first = IP_ECN_ECT0;
+	$$.present = (1 << IP_ECN_ECT0);
+	$$.field[IP_ECN_ECT0] = $3;
+}
+| ACCECN ACCECN_E0B accecn_val ACCECN_CEB accecn_val {
+	$$.first = IP_ECN_ECT0;
+	$$.present = (1 << IP_ECN_ECT0) | (1 << IP_ECN_CE);
+	$$.field[IP_ECN_ECT0] = $3;
+	$$.field[IP_ECN_CE]   = $5;
+}
+| ACCECN ACCECN_E0B accecn_val ACCECN_CEB accecn_val ACCECN_E1B accecn_val {
+	$$.first = IP_ECN_ECT0;
+	$$.present = (1 << IP_ECN_ECT0) | (1 << IP_ECN_CE) | (1 << IP_ECN_ECT1);
+	$$.field[IP_ECN_ECT0] = $3;
+	$$.field[IP_ECN_CE]   = $5;
+	$$.field[IP_ECN_ECT1] = $7;
+}
+| ACCECN ACCECN_E1B accecn_val {
+	$$.first = IP_ECN_ECT1;
+	$$.present = (1 << IP_ECN_ECT1);
+	$$.field[IP_ECN_ECT1] = $3;
+}
+| ACCECN ACCECN_E1B accecn_val ACCECN_CEB accecn_val {
+	$$.first = IP_ECN_ECT1;
+	$$.present = (1 << IP_ECN_ECT1) | (1 << IP_ECN_CE);
+	$$.field[IP_ECN_ECT1] = $3;
+	$$.field[IP_ECN_CE]   = $5;
+}
+| ACCECN ACCECN_E1B accecn_val ACCECN_CEB accecn_val ACCECN_E0B accecn_val {
+	$$.first = IP_ECN_ECT1;
+	$$.present = (1 << IP_ECN_ECT1) | (1 << IP_ECN_CE) | (1 << IP_ECN_ECT0);
+	$$.field[IP_ECN_ECT1] = $3;
+	$$.field[IP_ECN_CE]   = $5;
+	$$.field[IP_ECN_ECT0] = $7;
+}
 ;
 
 sack_block_list
@@ -1362,6 +1456,15 @@ sack_block
 	}
 	$$->data.sack.block[0].left = htonl($1);
 	$$->data.sack.block[0].right = htonl($3);
+}
+;
+
+accecn_val
+: INTEGER {
+	if (!is_valid_u24($1)) {
+		semantic_error("TCP AccECN field value out of range");
+	}
+	$$ = $1;
 }
 ;
 

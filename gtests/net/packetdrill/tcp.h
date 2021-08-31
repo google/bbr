@@ -104,6 +104,9 @@
 #define TCPOLEN_MD5SIG		18
 #define TCPOLEN_MD5_BASE	2
 #define TCPOPT_FASTOPEN		34
+#define TCPOPT_ACCECN0		172	/* 0xAC: Accurate ECN Order 0 */
+#define TCPOPT_ACCECN1		174	/* 0xAE: Accurate ECN Order 1 */
+#define TCPOLEN_ACCECN_BASE	2
 #define TCPOPT_EXP		254	/* Experimental */
 
 #define TCP_MD5_DIGEST_LEN	16	/* bytes in RFC2385 TCP MD5 digest */

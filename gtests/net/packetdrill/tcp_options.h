@@ -36,13 +36,15 @@
  *
  * For a description of experimental options, see:
  *   http://tools.ietf.org/html/draft-ietf-tcpm-experimental-options-00
- *
+ */
+
+/*
  * For a description of TFO, see:
  *   http://tools.ietf.org/html/draft-cheng-tcpm-fastopen-02
  */
 #define TCPOPT_FASTOPEN_MAGIC	0xF989
 
-/* Experimental TFO option must have:
+/* Experimental options must have:
  * 1-byte kind, 1-byte length, and 2-byte magic: */
 #define TCPOLEN_EXP_FASTOPEN_BASE 4	/* smallest legal TFO option size */
 
@@ -55,6 +57,11 @@
 #define MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES			\
 	(MAX_TCP_OPTION_BYTES - TCPOLEN_EXP_FASTOPEN_BASE)
 
+/* For a description of Accurate ECN, see:
+ *   https://datatracker.ietf.org/doc/html/draft-ietf-tcpm-accurate-ecn
+ */
+#define MAX_TCP_ACCECN_FIELDS	3
+
 /* Represents a list of TCP options in their wire format. */
 struct tcp_options {
 	u8 data[MAX_TCP_OPTION_BYTES];	/* The options data, in wire format */
@@ -66,6 +73,10 @@ struct sack_block {
 	u32 left;   /* left edge: 1st sequence number in block */
 	u32 right;  /* right edge: 1st sequence number just past block */
 };
+
+struct accecn_field {
+	u32 bytes : 24;
+} __attribute__ ((packed));
 
 /* Represents a single TCP option in its wire format. Note that for
  * EOL and NOP options the length and data field are not included in
@@ -104,6 +115,9 @@ struct tcp_option {
 			u16 magic;	/* must be TCPOPT_FASTOPEN_MAGIC */
 			u8 cookie[MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES];
 		} fast_open_exp;
+		struct __attribute__ ((packed)) {
+			struct accecn_field field[3];
+		} accecn;
 	} data;
 } __packed;
 
@@ -125,5 +139,11 @@ extern int tcp_options_append(struct tcp_options *options,
  * on failure returns STATUS_ERR and sets error message.
  */
 extern int num_sack_blocks(u8 opt_len, int *num_blocks, char **error);
+
+struct tcp_accecn_fields {
+	int first;
+	int present;
+	u32 field[1+MAX_TCP_ACCECN_FIELDS];	/* Non-ECT (unused) included */
+};
 
 #endif /* __TCP_OPTIONS_H__ */

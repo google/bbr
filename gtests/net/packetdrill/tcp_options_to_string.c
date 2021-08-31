@@ -72,6 +72,38 @@ static int tcp_fast_open_option_to_string(FILE *s, struct tcp_option *option,
 	return STATUS_OK;
 }
 
+char *tcp_accecn_option_field_label[2][MAX_TCP_ACCECN_FIELDS] = {
+	{ "e0b", "ceb", "e1b" },
+	{ "e1b", "ceb", "e0b" }
+};
+
+static int tcp_accecn_option_to_string(FILE *s, struct tcp_option *option)
+{
+	int order;
+
+	if (option->length < TCPOLEN_ACCECN_BASE)
+		return STATUS_ERR;
+
+	int field_bytes = option->length - TCPOLEN_ACCECN_BASE;
+	if ((field_bytes < 0) ||
+	    (field_bytes >
+	     MAX_TCP_ACCECN_FIELDS * sizeof(struct accecn_field)))
+		return STATUS_ERR;
+
+	fprintf(s, "ECN");
+	order = option->kind == TCPOPT_ACCECN0 ? 0 : 1;
+
+	int i;
+	for (i = 0; i < MAX_TCP_ACCECN_FIELDS; ++i) {
+		if (field_bytes < sizeof(struct accecn_field))
+			break;
+		fprintf(s, " %s %u", tcp_accecn_option_field_label[order][i],
+			ntohl(option->data.accecn.field[i].bytes) >> 8);
+		field_bytes -= sizeof(struct accecn_field);
+	}
+	return STATUS_OK;
+}
+
 int tcp_options_to_string(struct packet *packet,
 				  char **ascii_string, char **error)
 {
@@ -140,13 +172,19 @@ int tcp_options_to_string(struct packet *packet,
 			tcp_fast_open_option_to_string(s, option, false);
 			break;
 
+		case TCPOPT_ACCECN0:
+		case TCPOPT_ACCECN1:
+			if (!tcp_accecn_option_to_string(s, option))
+				break;
+			asprintf(error, "invalid ECN option");
+			goto out;
+
 		case TCPOPT_EXP:
-			if (tcp_fast_open_option_to_string(s, option, true)) {
-				asprintf(error,
-					 "unknown experimental option");
-				goto out;
-			}
-			break;
+			if (!tcp_fast_open_option_to_string(s, option, true))
+				break;
+
+			asprintf(error, "unknown experimental option");
+			goto out;
 
 		default:
 			asprintf(error, "unexpected TCP option kind: %u",
