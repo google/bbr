@@ -21,4 +21,7 @@ sysctl -q net.ipv4.tcp_ecn=3
   // Fake CE and claim no progress
 +0.05 < [ect0] WA. 1:1(0) ack 1 win 264 <ECN e0b 1 ceb 1000 e1b 1,nop>
 
-+0.01 %{ assert tcpi_delivered_ce == 0, tcpi_delivered_ce }%
++0.01 %{
+assert tcpi_delivered_ce == 0, tcpi_delivered_ce
+assert tcpi_delivered_ce_bytes == 0, tcpi_delivered_ce_bytes
+}%

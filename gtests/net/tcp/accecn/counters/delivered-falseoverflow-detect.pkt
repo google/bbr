@@ -25,4 +25,7 @@ sysctl -q net.ipv4.tcp_ecn=3
 +0.05 < [ect0] .5 1:1(0) ack 1460 win 264 <ECN e0b 1461 ceb 0 e1b 1,nop>
 +0.05 < [ect0] .5 1:1(0) ack 14601 win 264 <ECN e0b 14601 ceb 0 e1b 1,nop>
 
-+0.01 %{ assert tcpi_delivered_ce == 0, tcpi_delivered_ce }%
++0.01 %{
+assert tcpi_delivered_ce == 0, tcpi_delivered_ce
+assert tcpi_delivered_e0_bytes == 14600, tcpi_delivered_e0_bytes
+}%
