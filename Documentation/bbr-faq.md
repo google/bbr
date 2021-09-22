@@ -146,3 +146,13 @@ computed as a multiple of the maximum recent delivery rate seen.
 Here is a detailed derivation, along with some graphs to illustrate:
 
 - https://github.com/google/bbr/blob/master/Documentation/startup/gain/analysis/bbr_startup_gain.pdf
+
+## Where does the value of the BBR DRAIN pacing_gain come from?
+
+In a nutshell, the BBR DRAIN pacing gain is derived to be the pacing gain that
+is selected to try to drain the queue created by STARTUP in one packet-timed
+round trip.
+
+Here is a detailed derivation:
+
+- https://github.com/google/bbr/blob/master/Documentation/startup/gain/analysis/bbr_drain_gain.pdf
