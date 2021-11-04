@@ -1,0 +1,50 @@
+# 
+# <https://github.com/KFERMercer/OpenWrt-CI>
+#
+# Copyright (C) 2019 P3TERX
+#
+# Copyright (C) 2020 KFERMercer
+#
+name: BBR-ci
+
+on:
+  push:
+    branches: [ v2alpha ]
+  pull_request:
+    branches: [ v2alpha ]
+  schedule:
+    - cron: 1 * * * *
+    
+
+jobs:
+
+  build_bbr2:
+
+    name: Build BBR Kernel 
+
+    runs-on: ubuntu-20.04
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: master
+
+      - name: All command
+        run: |
+          sudo sed -i 's/#deb-src/deb-src/g' /etc/apt/sources.list
+          sudo sed -i 's/# deb-src/deb-src/g' /etc/apt/sources.list
+          sudo apt update && sudo apt-get update && apt upgrade -y && sudo apt-get install -y make gcc flex bison git build-essential libncurses5-dev dpkg-dev libelf-dev bc rsync kmod cpio
+
+          cd bbr && sudo touch .config && yes "" |sudo make -j1 deb-pkg  
+
+
+      - name: Upload release asset
+        if: github.event == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.YOURTOKEN }}
+          file: ./*.deb
+          tag: ${{ github.ref }}
+          file_glob: true
