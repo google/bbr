@@ -35,7 +35,8 @@ jobs:
         run: |
           sudo sed -i 's/#deb-src/deb-src/g' /etc/apt/sources.list
           sudo sed -i 's/# deb-src/deb-src/g' /etc/apt/sources.list
-          sudo apt update && sudo apt-get update &&sudo apt upgrade -y && sudo apt-get install -y make gcc flex bison git build-essential libncurses5-dev dpkg-dev libelf-dev bc rsync kmod cpio
+          sudo apt update && sudo apt-get update && sudo apt-get install -y make gcc flex bison git build-essential libncurses5-dev dpkg-dev libelf-dev bc rsync kmod cpio && sudo apt upgrade -y 
+
 
           sudo touch .config && yes "" |sudo make -j1 deb-pkg  
 
