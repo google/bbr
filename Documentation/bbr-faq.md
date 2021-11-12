@@ -156,3 +156,14 @@ round trip.
 Here is a detailed derivation:
 
 - https://github.com/google/bbr/blob/master/Documentation/startup/gain/analysis/bbr_drain_gain.pdf
+
+## How does BBR converge to an approximately fair share of bandwidth?
+
+In short, when there are multiple BBR flows sharing a bottleneck
+where there is no loss or ECN, BBR flows with a low share of throughput
+grow their bandwidth measurements more quickly than flows with a high
+share of throughput.
+
+Here is a detailed discussion:
+
+- https://github.com/google/bbr/blob/master/Documentation/bbr_bandwidth_based_convergence.pdf
