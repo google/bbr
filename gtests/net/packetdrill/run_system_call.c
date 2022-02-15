@@ -3371,14 +3371,12 @@ static int await_idle_thread(struct state *state)
 
 static int yield(void)
 {
-#if defined(linux)
-	return pthread_yield();
-#elif defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__OpenBSD__)
 	pthread_yield();
 	return 0;
-#elif defined(__NetBSD__)
+#elif defined(__NetBSD__) || defined(linux)
 	return sched_yield();
-#endif  /* defined(__NetBSD__) */
+#endif  /* defined(__NetBSD__) || defined(linux) */
 }
 
 /* Enqueue the system call for the syscall thread and wake up the thread. */
