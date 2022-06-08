@@ -124,6 +124,32 @@ And get output like the following:
   minrtt:14.451
 ```
 
+## How can I programmatically get Linux TCP BBR congestion control state for a socket?
+
+You can get key Linux TCP BBR state variables, including bandwidth estimate, min_rtt estimate, etc., using the TCP_CC_INFO socket option. For example:
+
+```
+#include <linux/inet_diag.h>
+...
+typedef unsigned long long u64;
+...
+  int fd;
+  u64 bw;
+ 
+  union tcp_cc_info info;
+  socklen_t len = sizeof(info);
+
+  if (getsockopt(fd, SOL_TCP, TCP_CC_INFO, &info, &len) < 0) {
+    perror("getsockopt(TCP_CC_INFO)");
+    exit(EXIT_FAILURE);
+  }
+
+  if (len >= sizeof(info.bbr)) {
+    bw = ((u64)info.bbr.bbr_bw_hi << 32) | (u64)info.bbr.bbr_bw_lo;
+    printf("bw: %lu bytes/sec\n", bw);
+    printf("min_rtt: %u usec\n", info.bbr.bbr_min_rtt);
+  }
+```
 
 ## Where can I find the source code for QUIC BBR?
 
