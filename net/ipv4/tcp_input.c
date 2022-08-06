@@ -490,24 +490,32 @@ static bool tcp_ecn_rcv_ecn_echo(const struct tcp_sock *tp, const struct tcphdr 
 	return false;
 }
 
-/* Maps IP ECN field ECT/CE bits to AccECN option field #nr */
+/* Maps IP ECN field ECT/CE code point to AccECN option field number, given
+ * we are sending fields with Accurate ECN Order 1: ECT(1), CE, ECT(0).
+ */
 static unsigned int tcp_ecnfield_to_accecn_optfield(u8 ecnfield)
 {
-	unsigned int opt;
-
-	opt = (ecnfield - 2) & INET_ECN_MASK;
-	/* Shift+XOR for 11 -> 10 */
-	opt = (opt ^ (opt >> 1)) + 1;
-
-	return opt;
+	switch (ecnfield) {
+	case INET_ECN_NOT_ECT:
+		return 0;	/* AccECN does not send counts of NOT_ECT */
+	case INET_ECN_ECT_1:
+		return 1;
+	case INET_ECN_CE:
+		return 2;
+	case INET_ECN_ECT_0:
+		return 3;
+	default:
+		WARN_ONCE(1, "bad ECN code point: %d\n", ecnfield);
+	}
+	return 0;
 }
 
 /* Maps AccECN option field #nr to IP ECN field ECT/CE bits */
-static unsigned int tcp_accecn_optfield_to_ecnfield(unsigned int optfield, bool order)
+static unsigned int tcp_accecn_optfield_to_ecnfield(unsigned int optfield, bool order1)
 {
 	u8 tmp;
 
-	optfield = order ? 2 - optfield : optfield;
+	optfield = order1 ? 2 - optfield : optfield;
 	tmp = optfield + 2;
 
 	return (tmp + (tmp >> 2)) & INET_ECN_MASK;
@@ -541,7 +549,7 @@ static bool tcp_accecn_process_option(struct tcp_sock *tp,
 	bool first_changed = false;
 	unsigned int optlen;
 	unsigned char *ptr;
-	bool order, res;
+	bool order1, res;
 	unsigned int i;
 
 	if (tp->saw_accecn_opt == TCP_ACCECN_OPT_FAIL)
@@ -566,9 +574,8 @@ static bool tcp_accecn_process_option(struct tcp_sock *tp,
 
 	ptr = skb_transport_header(skb) + tp->rx_opt.accecn;
 	optlen = ptr[1] - 2;
-	WARN_ON_ONCE(ptr[0] != TCPOPT_EXP);
-	ptr += 2;
-	order = get_unaligned_be16(ptr) == TCPOPT_ACCECN1_MAGIC;
+	WARN_ON_ONCE(ptr[0] != TCPOPT_ACCECN0 && ptr[0] != TCPOPT_ACCECN1);
+	order1 = (ptr[0] == TCPOPT_ACCECN1);
 	ptr += 2;
 
 	if (tp->saw_accecn_opt < TCP_ACCECN_OPT_COUNTER_SEEN)
@@ -577,8 +584,8 @@ static bool tcp_accecn_process_option(struct tcp_sock *tp,
 
 	res = !!estimate_ecnfield;
 	for (i = 0; i < 3; i++) {
-		if (optlen >= TCPOLEN_ACCECN_PERCOUNTER) {
-			u8 ecnfield = tcp_accecn_optfield_to_ecnfield(i, order);
+		if (optlen >= TCPOLEN_ACCECN_PERFIELD) {
+			u8 ecnfield = tcp_accecn_optfield_to_ecnfield(i, order1);
 			u32 init_offset = ecnfield == INET_ECN_ECT_0 ?
 					  TCP_ACCECN_E0B_INIT_OFFSET : 0;
 			s32 delta;
@@ -601,8 +608,8 @@ static bool tcp_accecn_process_option(struct tcp_sock *tp,
 				}
 			}
 
-			optlen -= TCPOLEN_ACCECN_PERCOUNTER;
-			ptr += TCPOLEN_ACCECN_PERCOUNTER;
+			optlen -= TCPOLEN_ACCECN_PERFIELD;
+			ptr += TCPOLEN_ACCECN_PERFIELD;
 		}
 	}
 	if (ambiguous_ecn_bytes_incr)
@@ -4413,18 +4420,19 @@ void tcp_parse_options(const struct net *net,
 					ptr, th->syn, foc, false);
 				break;
 
+			case TCPOPT_ACCECN0:
+			case TCPOPT_ACCECN1:
+				/* Save offset of AccECN option in TCP header */
+				opt_rx->accecn = (ptr - 2) - (__u8 *)th;
+				break;
+
 			case TCPOPT_EXP:
-				if (opsize >= TCPOLEN_EXP_ACCECN_BASE) {
-					u16 magic = get_unaligned_be16(ptr);
-					if (magic == TCPOPT_ACCECN0_MAGIC ||
-					    magic == TCPOPT_ACCECN1_MAGIC)
-						opt_rx->accecn = (ptr - 2) - (unsigned char *)th;
 				/* Fast Open option shares code 254 using a
 				 * 16 bits magic number.
 				 */
-				} else if (opsize >= TCPOLEN_EXP_FASTOPEN_BASE &&
-					 get_unaligned_be16(ptr) ==
-					 TCPOPT_FASTOPEN_MAGIC) {
+				if (opsize >= TCPOLEN_EXP_FASTOPEN_BASE &&
+				    get_unaligned_be16(ptr) ==
+				    TCPOPT_FASTOPEN_MAGIC) {
 					tcp_parse_fastopen_option(opsize -
 						TCPOLEN_EXP_FASTOPEN_BASE,
 						ptr + 2, th->syn, foc, true);

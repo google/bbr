@@ -496,18 +496,17 @@ u8 tcp_accecn_option_init(const struct sk_buff *skb, u8 opt_offset)
 {
 	unsigned char *ptr = skb_transport_header(skb) + opt_offset;
 	unsigned int optlen = ptr[1] - 2;
-	bool order;
+	bool order1;
 
-	WARN_ON_ONCE(ptr[0] != TCPOPT_EXP);
-	ptr += 2;
-	order = get_unaligned_be16(ptr) == TCPOPT_ACCECN1_MAGIC;
+	WARN_ON_ONCE(ptr[0] != TCPOPT_ACCECN0 && ptr[0] != TCPOPT_ACCECN1);
+	order1 = (ptr[0] == TCPOPT_ACCECN1);
 	ptr += 2;
 
-	if (optlen >= TCPOLEN_ACCECN_PERCOUNTER) {
-		if (order) {
-			if (optlen < TCPOLEN_ACCECN_PERCOUNTER * 3)
+	if (optlen >= TCPOLEN_ACCECN_PERFIELD) {
+		if (order1) {
+			if (optlen < TCPOLEN_ACCECN_PERFIELD * 3)
 				return TCP_ACCECN_OPT_COUNTER_SEEN;
-			ptr += TCPOLEN_ACCECN_PERCOUNTER * 2;
+			ptr += TCPOLEN_ACCECN_PERFIELD * 2;
 		}
 		/* Detect option zeroing. Check the e0b counter value,
 		 * if present, it must be != 0.
