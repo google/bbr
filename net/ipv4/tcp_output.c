@@ -650,8 +650,6 @@ static void bpf_skops_write_hdr_opt(struct sock *sk, struct sk_buff *skb,
 }
 #endif
 
-#define NOP_LEFTOVER	((TCPOPT_NOP << 8) | TCPOPT_NOP)
-
 /* Write previously computed TCP options to the packet.
  *
  * Beware: Something in the Internet is very sensitive to the ordering of
@@ -668,7 +666,7 @@ static void bpf_skops_write_hdr_opt(struct sock *sk, struct sk_buff *skb,
 static void tcp_options_write(__be32 *ptr, struct tcp_sock *tp,
 			      struct tcp_out_options *opts)
 {
-	u16 leftover_bytes = NOP_LEFTOVER;	/* replace next NOPs if avail */
+	u16 leftover_bytes = ((TCPOPT_NOP << 8) | TCPOPT_NOP);
 	u16 options = opts->options;	/* mungable copy */
 	int leftover_size = 2;
 
@@ -743,19 +741,20 @@ static void tcp_options_write(__be32 *ptr, struct tcp_sock *tp,
 		*ptr++ = htonl((leftover_bytes << 16) |
 			       (TCPOPT_SACK_PERM << 8) |
 			       TCPOLEN_SACK_PERM);
-		leftover_bytes = NOP_LEFTOVER;
+		leftover_size = 0;
 	}
 
 	if (unlikely(OPTION_WSCALE & options)) {
 		u8 highbyte = TCPOPT_NOP;
 
-		if (unlikely(leftover_size == 1))
+		if (unlikely(leftover_size == 1)) {
 			highbyte = leftover_bytes >> 8;
+			leftover_size = 0;
+		}
 		*ptr++ = htonl((highbyte << 24) |
 			       (TCPOPT_WINDOW << 16) |
 			       (TCPOLEN_WINDOW << 8) |
 			       opts->ws);
-		leftover_bytes = NOP_LEFTOVER;
 	}
 
 	if (unlikely(opts->num_sack_blocks)) {
@@ -775,7 +774,7 @@ static void tcp_options_write(__be32 *ptr, struct tcp_sock *tp,
 		}
 
 		tp->rx_opt.dsack = 0;
-	} else if (unlikely(leftover_bytes != NOP_LEFTOVER)) {
+	} else if (leftover_size > 0) {
 		*ptr++ = htonl((leftover_bytes << 16) |
 			       (TCPOPT_NOP << 8) |
 			       TCPOPT_NOP);
