@@ -52,9 +52,14 @@ class TestSet(object):
     errfile = tempfile.TemporaryFile(mode='w+')
 
     process = subprocess.Popen(cmd, stdout=outfile, stderr=errfile, cwd=execdir)
+    is_done = False
+    entry = (process, path, variant, outfile, errfile, is_done)
     if self.args['serialized']:
       process.wait()
-    return (process, path, variant, outfile, errfile)
+      self.PollTest(entry)
+      is_done = True
+      entry = (process, path, variant, outfile, errfile, is_done)
+    return entry
 
   def StartTestIPv4(self, path):
     """Run a packetdrill test over ipv4."""
@@ -120,7 +125,10 @@ class TestSet(object):
 
   def PollTest(self, test):
     """Test whether a test has finished and if so record its return value."""
-    process, path, variant, outfile, errfile = test
+    process, path, variant, outfile, errfile, is_done = test
+
+    if is_done:
+      return True  # test was serialized and already completed
 
     if process.poll() is None:
       return False
@@ -149,7 +157,7 @@ class TestSet(object):
           procs.remove(entry)
 
     self.num_timedout = len(procs)
-    for proc, path, variant, outfile, errfile in procs:
+    for proc, path, variant, outfile, errfile, is_done in procs:
       try:
         proc.kill()
       except:
