@@ -36,11 +36,8 @@
  *
  * For a description of experimental options, see:
  *   http://tools.ietf.org/html/draft-ietf-tcpm-experimental-options-00
- * For a description of Accurate ECN, see:
- *   https://tools.ietf.org/html/draft-ietf-tcpm-accurate-ecn-14
  */
-#define TCPOPT_ACCECN0_MAGIC	0xACC0
-#define TCPOPT_ACCECN1_MAGIC	0xACC1
+
 /*
  * For a description of TFO, see:
  *   http://tools.ietf.org/html/draft-cheng-tcpm-fastopen-02
@@ -49,7 +46,6 @@
 
 /* Experimental options must have:
  * 1-byte kind, 1-byte length, and 2-byte magic: */
-#define TCPOLEN_EXP_ACCECN_BASE	4
 #define TCPOLEN_EXP_FASTOPEN_BASE 4	/* smallest legal TFO option size */
 
 /* RFC7413 TFO option must have: 1-byte kind, 1-byte length: */
@@ -61,6 +57,9 @@
 #define MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES			\
 	(MAX_TCP_OPTION_BYTES - TCPOLEN_EXP_FASTOPEN_BASE)
 
+/* For a description of Accurate ECN, see:
+ *   https://datatracker.ietf.org/doc/html/draft-ietf-tcpm-accurate-ecn
+ */
 #define MAX_TCP_ACCECN_COUNTERS	3
 
 /* Represents a list of TCP options in their wire format. */
@@ -117,9 +116,8 @@ struct tcp_option {
 			u8 cookie[MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES];
 		} fast_open_exp;
 		struct {
-			u16 magic;	/* must be TCPOPT_ACCECN_MAGIC */
 			struct accecn_counter counter[3];
-		} accecn_exp __attribute__ ((packed));
+		} accecn __attribute__ ((packed));
 	} data;
 } __packed;
 

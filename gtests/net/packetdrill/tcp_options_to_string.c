@@ -77,25 +77,21 @@ char *tcp_accecn_option_counter_label[2][MAX_TCP_ACCECN_COUNTERS] = {
 	{ "e1b", "ceb", "e0b" }
 };
 
-static int tcp_accecn_option_to_string(FILE *s, struct tcp_option *option,
-				       bool exp)
+static int tcp_accecn_option_to_string(FILE *s, struct tcp_option *option)
 {
-	u16 magic;
 	int order;
 
-	if (exp && (option->length < TCPOLEN_EXP_ACCECN_BASE))
+	if (option->length < TCPOLEN_ACCECN_BASE)
 		return STATUS_ERR;
 
-	magic = ntohs(option->data.accecn_exp.magic);
-	if (magic != TCPOPT_ACCECN0_MAGIC && magic != TCPOPT_ACCECN1_MAGIC)
+	int counter_bytes = option->length - TCPOLEN_ACCECN_BASE;
+	if ((counter_bytes < 0) ||
+	    (counter_bytes >
+	     MAX_TCP_ACCECN_COUNTERS * sizeof(struct accecn_counter)))
 		return STATUS_ERR;
-	order = magic == TCPOPT_ACCECN0_MAGIC ? 0 : 1;
 
-	fprintf(s, "AccECNEXP%u", order);
-	int counter_bytes = option->length - TCPOLEN_EXP_ACCECN_BASE;
-	assert(counter_bytes >= 0);
-	assert(counter_bytes <= MAX_TCP_ACCECN_COUNTERS *
-				sizeof(struct accecn_counter));
+	fprintf(s, "ECN");
+	order = option->kind == TCPOPT_ACCECN0 ? 0 : 1;
 
 	int i;
 	for (i = 0; i < MAX_TCP_ACCECN_COUNTERS; ++i) {
@@ -176,10 +172,15 @@ int tcp_options_to_string(struct packet *packet,
 			tcp_fast_open_option_to_string(s, option, false);
 			break;
 
+		case TCPOPT_ACCECN0:
+		case TCPOPT_ACCECN1:
+			if (!tcp_accecn_option_to_string(s, option))
+				break;
+			asprintf(error, "invalid ECN option");
+			goto out;
+
 		case TCPOPT_EXP:
 			if (!tcp_fast_open_option_to_string(s, option, true))
-				break;
-			if (!tcp_accecn_option_to_string(s, option, true))
 				break;
 
 			asprintf(error, "unknown experimental option");
