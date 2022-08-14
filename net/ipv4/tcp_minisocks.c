@@ -438,6 +438,9 @@ static void tcp_ecn_openreq_child(struct sock *sk,
 		tp->syn_ect_snt = treq->syn_ect_snt;
 		tcp_accecn_third_ack(sk, skb, treq->syn_ect_snt);
 		tp->saw_accecn_opt = treq->saw_accecn_opt;
+		if (XXXDEBUG(sk))
+			pr_info("tcp_ecn_openreq_child: saw_accecn_opt: %d\n",
+				tp->saw_accecn_opt);
 		tp->prev_ecnfield = treq->syn_ect_rcv;
 		tp->accecn_opt_demand = 1;
 		tcp_ecn_received_counters(sk, skb, skb->len - th->doff * 4);
@@ -505,13 +508,17 @@ u8 tcp_accecn_option_init(const struct sk_buff *skb, u8 opt_offset)
 	 */
 	if (optlen < TCPOLEN_ACCECN_PERFIELD)
 		return TCP_ACCECN_OPT_EMPTY_SEEN;
-	if (get_unaligned_be24(ptr) == 0)
+	if (get_unaligned_be24(ptr) == 0) {
+		pr_info("tcp_accecn_option_init TCP_ACCECN_OPT_FAIL 1st\n");
 		return TCP_ACCECN_OPT_FAIL;
+	}
 	if (optlen < TCPOLEN_ACCECN_PERFIELD * 3)
 		return TCP_ACCECN_OPT_COUNTER_SEEN;
 	ptr += TCPOLEN_ACCECN_PERFIELD * 2;
-	if (get_unaligned_be24(ptr) == 0)
+	if (get_unaligned_be24(ptr) == 0) {
+		pr_info("tcp_accecn_option_init TCP_ACCECN_OPT_FAIL 2nd\n");
 		return TCP_ACCECN_OPT_FAIL;
+	}
 
 	return TCP_ACCECN_OPT_COUNTER_SEEN;
 }
@@ -822,6 +829,9 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	if (tcp_rsk(req)->accecn_ok && tmp_opt.accecn &&
 	    tcp_rsk(req)->saw_accecn_opt < TCP_ACCECN_OPT_COUNTER_SEEN)
 		tcp_rsk(req)->saw_accecn_opt = tcp_accecn_option_init(skb, tmp_opt.accecn);
+	if (XXXDEBUG(sk))
+		pr_info("tcp_check_req: saw_accecn_opt: %d\n",
+			tcp_rsk(req)->saw_accecn_opt);
 
 	/* For Fast Open no more processing is needed (sk is the
 	 * child socket).
