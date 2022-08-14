@@ -115,9 +115,9 @@ struct tcp_option {
 			u16 magic;	/* must be TCPOPT_FASTOPEN_MAGIC */
 			u8 cookie[MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES];
 		} fast_open_exp;
-		struct {
+		struct __attribute__ ((packed)) {
 			struct accecn_field field[3];
-		} accecn; //XXX __attribute__ ((packed));
+		} accecn;
 	} data;
 } __packed;
 
