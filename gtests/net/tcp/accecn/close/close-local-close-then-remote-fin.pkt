@@ -2,7 +2,7 @@
 // the local process calls close() first, so we send a FIN, and receive an ACK.
 // Then we receive a FIN and ACK it.
 
-`../common/defaults.sh
+`../../common/defaults.sh
 sysctl -q net.ipv4.tcp_ecn=3
 sysctl -q net.ipv4.tcp_ecn_option=0
 sysctl -q net.ipv4.tcp_congestion_control=prague

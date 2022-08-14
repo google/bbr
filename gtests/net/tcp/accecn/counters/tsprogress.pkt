@@ -11,7 +11,7 @@ sysctl -q net.ipv4.tcp_ecn=3
    +0 listen(3, 1) = 0
 
    +0 < SEWA 0:0(0) win 32792 <mss 1050,sackOK,TS val 1 ecr 0,nop,wscale 8>
-+.002 > SW. 0:0(0) ack 1 <mss 1460,sackOK,TS val 10 ecr 1,ECN e0b 1 ceb 0 e1b 0,wscale 8>
++.002 > SW. 0:0(0) ack 1 <mss 1460,sackOK,TS val 10 ecr 1,ECN e1b 1 ceb 0 e0b 1,nop,nop,wscale 8>
 +0.05 < [ect0] W. 1:1(0) ack 1 win 264 <nop,nop,TS val 2 ecr 10>
 +.002 accept(3, ..., ...) = 4
 
