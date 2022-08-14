@@ -439,38 +439,43 @@ static struct tcp_option *new_tcp_fast_open_option(const char *cookie_string,
 	return option;
 }
 
-int accecn_counter_order[2][MAX_TCP_ACCECN_COUNTERS] = {
+const int accecn_field_order[2][MAX_TCP_ACCECN_FIELDS] = {
 	{IP_ECN_ECT0, IP_ECN_CE, IP_ECN_ECT1},
 	{IP_ECN_ECT1, IP_ECN_CE, IP_ECN_ECT0},
 };
 
-static struct tcp_option *new_tcp_accecn_option(struct tcp_accecn_counters *cnts,
+static struct tcp_option *new_tcp_accecn_option(struct tcp_accecn_fields *cnts,
 						char **error, bool exp)
 {
-	struct tcp_option *option;
-	int counters = 0;
-	u8 option_bytes;
-	int i;
-	int order = cnts->first == IP_ECN_ECT0 ? 0 : 1;
-	int *counter_order = accecn_counter_order[order];
+	struct tcp_option *option = NULL;
+	u8 option_bytes = 0, option_kind = 0;
+	const int *field_order = NULL;
+	int num_fields = 0;
+	int i = 0, order = 0;
 
-	for (i = 0; i < MAX_TCP_ACCECN_COUNTERS; i++) {
-		if (cnts->present & (1 << counter_order[i]))
-			counters = i + 1;
-		else
-			cnts->counter[counter_order[i]] = 0;
+	if (cnts->first == IP_ECN_ECT0) {
+		order = 0;
+		option_kind = TCPOPT_ACCECN0;
+	} else {
+		order = 1;
+		option_kind = TCPOPT_ACCECN1;
 	}
-	option_bytes = counters * sizeof(struct accecn_counter) +
-				TCPOLEN_EXP_ACCECN_BASE;
-	option = tcp_option_new(TCPOPT_EXP, option_bytes);
-	if (exp)
-		option->data.accecn_exp.magic = htons(cnts->first == IP_ECN_ECT0 ?
-						      TCPOPT_ACCECN0_MAGIC :
-						      TCPOPT_ACCECN1_MAGIC);
+	field_order = accecn_field_order[order];
 
-	for (i = 0; i < counters; i++) {
-		u32 val = cnts->counter[counter_order[i]];
-		option->data.accecn_exp.counter[i].bytes = htonl(val << 8);
+	for (i = 0; i < MAX_TCP_ACCECN_FIELDS; i++) {
+		if (cnts->present & (1 << field_order[i]))
+			num_fields = i + 1;
+		else
+			cnts->field[field_order[i]] = 0;
+	}
+	option_bytes = num_fields * sizeof(struct accecn_field) +
+		       TCPOLEN_ACCECN_BASE;
+	option = tcp_option_new(option_kind, option_bytes);
+
+	for (i = 0; i < num_fields; i++) {
+		const u32 val = cnts->field[field_order[i]];
+
+		option->data.accecn.field[i].bytes = htonl(val << 8);
 	}
 	return option;
 }
@@ -552,7 +557,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 	struct code_spec *code;
 	struct tcp_option *tcp_option;
 	struct tcp_options *tcp_options;
-	struct tcp_accecn_counters tcp_accecn_counters;
+	struct tcp_accecn_fields tcp_accecn_fields;
 	struct expression *expression;
 	struct expression_list *expression_list;
 	struct errno_spec *errno_info;
@@ -573,7 +578,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %token <reserved> FD EVENTS REVENTS ONOFF LINGER
 %token <reserved> U32 U64 PTR
 %token <reserved> ACK ECR EOL MSS NOP SACK SACKOK TIMESTAMP VAL WIN WSCALE
-%token <reserved> URG MD5 FAST_OPEN FAST_OPEN_EXP ACCECN_EXP0 ACCECN_EXP1
+%token <reserved> URG MD5 FAST_OPEN FAST_OPEN_EXP ACCECN
 %token <reserved> ACCECN_E0B ACCECN_E1B ACCECN_CEB
 %token <reserved> TOS FLAGS FLOWLABEL
 %token <reserved> ECT0 ECT1 CE ECT01 NO_ECN
@@ -590,7 +595,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <direction> direction
 %type <ip_info> ip_info opt_ip_info
 %type <tos_spec> tos_spec
-%type <ip_ecn> ip_ecn accecn_counter_id
+%type <ip_ecn> ip_ecn
 %type <option> option options opt_options
 %type <event> event events event_time action
 %type <time_usecs> time opt_end_time
@@ -607,6 +612,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <integer> gre_sum gre_off gre_key gre_seq
 %type <integer> opt_icmp_echo_id
 %type <integer> flow_label
+%type <integer> accecn_val
 %type <string> icmp_type opt_icmp_code opt_ack_flag opt_word ack_and_ace flags
 %type <string> opt_tcp_fast_open_cookie hex_blob
 %type <string> opt_note note word_list
@@ -618,7 +624,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <tcp_sequence_info> seq opt_icmp_echoed
 %type <tcp_options> opt_tcp_options tcp_option_list
 %type <tcp_option> tcp_option sack_block_list sack_block
-%type <tcp_accecn_counters> accecn_exp_option accecn_counter_list accecn_counter
+%type <tcp_accecn_fields> accecn_option
 %type <string> function_name
 %type <expression_list> expression_list function_arguments
 %type <expression> expression binary_expression array sub_expr_list
@@ -1372,7 +1378,7 @@ tcp_option
 		free(error);
 	}
 }
-| accecn_exp_option {
+| accecn_option {
 	char *error = NULL;
 	$$ = new_tcp_accecn_option(&$1, &error, true);
 
@@ -1384,14 +1390,42 @@ tcp_option
 }
 ;
 
-accecn_exp_option
-: ACCECN_EXP0 accecn_counter_list {
-	$$ = $2;
+accecn_option
+: ACCECN ACCECN_E0B accecn_val {
 	$$.first = IP_ECN_ECT0;
+	$$.present = (1 << IP_ECN_ECT0);
+	$$.field[IP_ECN_ECT0] = $3;
 }
-| ACCECN_EXP1 accecn_counter_list {
-	$$ = $2;
+| ACCECN ACCECN_E0B accecn_val ACCECN_CEB accecn_val {
+	$$.first = IP_ECN_ECT0;
+	$$.present = (1 << IP_ECN_ECT0) | (1 << IP_ECN_CE);
+	$$.field[IP_ECN_ECT0] = $3;
+	$$.field[IP_ECN_CE]   = $5;
+}
+| ACCECN ACCECN_E0B accecn_val ACCECN_CEB accecn_val ACCECN_E1B accecn_val {
+	$$.first = IP_ECN_ECT0;
+	$$.present = (1 << IP_ECN_ECT0) | (1 << IP_ECN_CE) | (1 << IP_ECN_ECT1);
+	$$.field[IP_ECN_ECT0] = $3;
+	$$.field[IP_ECN_CE]   = $5;
+	$$.field[IP_ECN_ECT0] = $7;
+}
+| ACCECN ACCECN_E1B accecn_val {
 	$$.first = IP_ECN_ECT1;
+	$$.present = (1 << IP_ECN_ECT1);
+	$$.field[IP_ECN_ECT1] = $3;
+}
+| ACCECN ACCECN_E1B accecn_val ACCECN_CEB accecn_val {
+	$$.first = IP_ECN_ECT1;
+	$$.present = (1 << IP_ECN_ECT1) | (1 << IP_ECN_CE);
+	$$.field[IP_ECN_ECT1] = $3;
+	$$.field[IP_ECN_CE]   = $5;
+}
+| ACCECN ACCECN_E1B accecn_val ACCECN_CEB accecn_val ACCECN_E0B accecn_val {
+	$$.first = IP_ECN_ECT1;
+	$$.present = (1 << IP_ECN_ECT1) | (1 << IP_ECN_CE) | (1 << IP_ECN_ECT0);
+	$$.field[IP_ECN_ECT1] = $3;
+	$$.field[IP_ECN_CE]   = $5;
+	$$.field[IP_ECN_ECT0] = $7;
 }
 ;
 
@@ -1425,32 +1459,13 @@ sack_block
 }
 ;
 
-accecn_counter_list
-: accecn_counter		     { $$ = $1; }
-| accecn_counter_list accecn_counter {
-	$$.present = ($1.present | $2.present);
-	for (int i = IP_ECN_ECT1; i <= IP_ECN_CE; i++) {
-		if ($1.present & (1 << i))
-			$$.counter[i] = $1.counter[i];
-		if ($2.present & (1 << i))
-			$$.counter[i] = $2.counter[i];
+accecn_val
+: INTEGER {
+	if (!is_valid_u24($1)) {
+		semantic_error("TCP AccECN field value out of range");
 	}
-};
-
-accecn_counter
-: accecn_counter_id INTEGER {
-	if (!is_valid_u24($2)) {
-		semantic_error("TCP AccECN counter out of range");
-	}
-	$$.present = 1 << $1;
-	$$.counter[$1] = $2;
+	$$ = $1;
 }
-;
-
-accecn_counter_id
-: ACCECN_E0B { $$ = IP_ECN_ECT0; }
-| ACCECN_CEB { $$ = IP_ECN_CE; }
-| ACCECN_E1B { $$ = IP_ECN_ECT1; }
 ;
 
 syscall_spec

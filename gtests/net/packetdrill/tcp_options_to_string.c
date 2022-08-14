@@ -72,7 +72,7 @@ static int tcp_fast_open_option_to_string(FILE *s, struct tcp_option *option,
 	return STATUS_OK;
 }
 
-char *tcp_accecn_option_counter_label[2][MAX_TCP_ACCECN_COUNTERS] = {
+char *tcp_accecn_option_field_label[2][MAX_TCP_ACCECN_FIELDS] = {
 	{ "e0b", "ceb", "e1b" },
 	{ "e1b", "ceb", "e0b" }
 };
@@ -84,22 +84,22 @@ static int tcp_accecn_option_to_string(FILE *s, struct tcp_option *option)
 	if (option->length < TCPOLEN_ACCECN_BASE)
 		return STATUS_ERR;
 
-	int counter_bytes = option->length - TCPOLEN_ACCECN_BASE;
-	if ((counter_bytes < 0) ||
-	    (counter_bytes >
-	     MAX_TCP_ACCECN_COUNTERS * sizeof(struct accecn_counter)))
+	int field_bytes = option->length - TCPOLEN_ACCECN_BASE;
+	if ((field_bytes < 0) ||
+	    (field_bytes >
+	     MAX_TCP_ACCECN_FIELDS * sizeof(struct accecn_field)))
 		return STATUS_ERR;
 
 	fprintf(s, "ECN");
 	order = option->kind == TCPOPT_ACCECN0 ? 0 : 1;
 
 	int i;
-	for (i = 0; i < MAX_TCP_ACCECN_COUNTERS; ++i) {
-		if (counter_bytes < sizeof(struct accecn_counter))
+	for (i = 0; i < MAX_TCP_ACCECN_FIELDS; ++i) {
+		if (field_bytes < sizeof(struct accecn_field))
 			break;
-		fprintf(s, " %s %u", tcp_accecn_option_counter_label[order][i],
-			ntohl(option->data.accecn_exp.counter[i].bytes) >> 8);
-		counter_bytes -= sizeof(struct accecn_counter);
+		fprintf(s, " %s %u", tcp_accecn_option_field_label[order][i],
+			ntohl(option->data.accecn.field[i].bytes) >> 8);
+		field_bytes -= sizeof(struct accecn_field);
 	}
 	return STATUS_OK;
 }

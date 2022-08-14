@@ -60,7 +60,7 @@
 /* For a description of Accurate ECN, see:
  *   https://datatracker.ietf.org/doc/html/draft-ietf-tcpm-accurate-ecn
  */
-#define MAX_TCP_ACCECN_COUNTERS	3
+#define MAX_TCP_ACCECN_FIELDS	3
 
 /* Represents a list of TCP options in their wire format. */
 struct tcp_options {
@@ -74,7 +74,7 @@ struct sack_block {
 	u32 right;  /* right edge: 1st sequence number just past block */
 };
 
-struct accecn_counter {
+struct accecn_field {
 	u32 bytes : 24;
 } __attribute__ ((packed));
 
@@ -116,8 +116,8 @@ struct tcp_option {
 			u8 cookie[MAX_TCP_FAST_OPEN_EXP_COOKIE_BYTES];
 		} fast_open_exp;
 		struct {
-			struct accecn_counter counter[3];
-		} accecn __attribute__ ((packed));
+			struct accecn_field field[3];
+		} accecn; //XXX __attribute__ ((packed));
 	} data;
 } __packed;
 
@@ -140,10 +140,10 @@ extern int tcp_options_append(struct tcp_options *options,
  */
 extern int num_sack_blocks(u8 opt_len, int *num_blocks, char **error);
 
-struct tcp_accecn_counters {
-	int present;
+struct tcp_accecn_fields {
 	int first;
-	u32 counter[1+MAX_TCP_ACCECN_COUNTERS];	/* Non-ECT (unused) included */
+	int present;
+	u32 field[1+MAX_TCP_ACCECN_FIELDS];	/* Non-ECT (unused) included */
 };
 
 #endif /* __TCP_OPTIONS_H__ */
