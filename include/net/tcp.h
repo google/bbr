@@ -903,7 +903,7 @@ static inline u64 tcp_skb_timestamp_us(const struct sk_buff *skb)
  * See draft-ietf-tcpm-accurate-ecn for the latest values.
  */
 #define TCP_ACCECN_CEP_INIT_OFFSET 5
-#define TCP_ACCECN_E1B_INIT_OFFSET 0
+#define TCP_ACCECN_E1B_INIT_OFFSET 1
 #define TCP_ACCECN_E0B_INIT_OFFSET 1
 #define TCP_ACCECN_CEB_INIT_OFFSET 0
 
