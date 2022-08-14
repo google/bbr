@@ -1407,7 +1407,7 @@ accecn_option
 	$$.present = (1 << IP_ECN_ECT0) | (1 << IP_ECN_CE) | (1 << IP_ECN_ECT1);
 	$$.field[IP_ECN_ECT0] = $3;
 	$$.field[IP_ECN_CE]   = $5;
-	$$.field[IP_ECN_ECT0] = $7;
+	$$.field[IP_ECN_ECT1] = $7;
 }
 | ACCECN ACCECN_E1B accecn_val {
 	$$.first = IP_ECN_ECT1;
