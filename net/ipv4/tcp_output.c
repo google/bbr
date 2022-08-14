@@ -47,18 +47,6 @@
 
 #include <trace/events/tcp.h>
 
-static bool XXXDEBUG(const struct sock *sk)
-{
-
-	if (sk) {
-		struct inet_sock *inet = inet_sk(sk);
-
-		return (ntohs(inet->inet_dport) == 8080 || ntohs(inet->inet_sport) == 8080);
-	}
-
-	return false;
-}
-
 /* Refresh clocks of a TCP socket,
  * ensuring monotically increasing values.
  */

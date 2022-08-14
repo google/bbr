@@ -271,6 +271,18 @@ extern atomic_long_t tcp_memory_allocated;
 extern struct percpu_counter tcp_sockets_allocated;
 extern unsigned long tcp_memory_pressure;
 
+static inline bool XXXDEBUG(const struct sock *sk)
+{
+
+	if (sk) {
+		struct inet_sock *inet = inet_sk(sk);
+
+		return (ntohs(inet->inet_dport) == 8080 || ntohs(inet->inet_sport) == 8080);
+	}
+
+	return false;
+}
+
 /* optimized version of sk_under_memory_pressure() for TCP sockets */
 static inline bool tcp_under_memory_pressure(const struct sock *sk)
 {

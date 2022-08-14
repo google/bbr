@@ -560,8 +560,12 @@ static bool tcp_accecn_process_option(struct tcp_sock *tp,
 			/* Too late to enable after this point due to
 			 * potential counter wraps
 			 */
-			if (tp->bytes_sent >= (1 << 23) - 1)
+			if (tp->bytes_sent >= (1 << 23) - 1) {
 				tp->saw_accecn_opt = TCP_ACCECN_OPT_FAIL;
+				if (XXXDEBUG((struct sock *)tp))
+					pr_info("setting saw_accecn_opt to TCP_ACCECN_OPT_FAIL: %d\n",
+						tp->saw_accecn_opt);
+			}
 			return false;
 		}
 
