@@ -47,6 +47,18 @@
 
 #include <trace/events/tcp.h>
 
+static bool XXXDEBUG(const struct sock *sk)
+{
+
+	if (sk) {
+		struct inet_sock *inet = inet_sk(sk);
+
+		return (ntohs(inet->inet_dport) == 8080 || ntohs(inet->inet_sport) == 8080);
+	}
+
+	return false;
+}
+
 /* Refresh clocks of a TCP socket,
  * ensuring monotically increasing values.
  */
@@ -669,6 +681,7 @@ static void tcp_options_write(__be32 *ptr, struct tcp_sock *tp,
 	u16 leftover_bytes = ((TCPOPT_NOP << 8) | TCPOPT_NOP);
 	u16 options = opts->options;	/* mungable copy */
 	int leftover_size = 2;
+	const struct sock *sk = (const struct sock *)tp;
 
 	if (unlikely(OPTION_MD5 & options)) {
 		*ptr++ = htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |
@@ -700,6 +713,10 @@ static void tcp_options_write(__be32 *ptr, struct tcp_sock *tp,
 		*ptr++ = htonl(opts->tsval);
 		*ptr++ = htonl(opts->tsecr);
 	}
+
+	if (XXXDEBUG(sk))
+		pr_info("tcp_options_write: OPTION_ACCECN? %d num_accecn_fields: %d\n",
+			OPTION_ACCECN & options, opts->num_accecn_fields);
 
 	if (OPTION_ACCECN & options) {
 		u32 e0b = opts->ecn_bytes[INET_ECN_ECT_0 - 1] + TCP_ACCECN_E0B_INIT_OFFSET;
@@ -875,13 +892,17 @@ static u32 tcp_synack_options_combine_saving(struct tcp_out_options *opts)
 }
 
 /* AccECN can sometimes use NOPs for alignment of other options. */
-static int tcp_options_fit_accecn(struct tcp_out_options *opts, int required,
+static int tcp_options_fit_accecn(const struct sock *sk, struct tcp_out_options *opts, int required,
 				  int remaining, int max_combine_saving)
 {
 	int size = TCP_ACCECN_MAXSIZE;
 
 	opts->num_accecn_fields = TCP_ACCECN_NUMFIELDS;
 
+	if (XXXDEBUG(sk))
+		pr_info("tcp_options_fit_accecn: num_accecn_fields: %d required: %d\n",
+			opts->num_accecn_fields, required);
+	
 	while (opts->num_accecn_fields >= required) {
 		int leftover_size = size & 0x3;
 		/* Pad to dword if cannot combine */
@@ -895,13 +916,17 @@ static int tcp_options_fit_accecn(struct tcp_out_options *opts, int required,
 
 		opts->num_accecn_fields--;
 		size -= TCPOLEN_ACCECN_PERFIELD;
+
+		if (XXXDEBUG(sk))
+			pr_info("num_accecn_fields: %d required: %d size: %d leftover_size: %d\n",
+			opts->num_accecn_fields, required, size, leftover_size);
 	}
 
 	if (opts->num_accecn_fields < required) {
 		if (opts->num_sack_blocks > 2) {
 			/* Try to fit the option by removing one SACK block */
 			opts->num_sack_blocks--;
-			size = tcp_options_fit_accecn(opts, required,
+			size = tcp_options_fit_accecn(sk, opts, required,
 						      remaining + TCPOLEN_SACK_PERBLOCK,
 						      max_combine_saving);
 			if (opts->options & OPTION_ACCECN)
@@ -911,6 +936,10 @@ static int tcp_options_fit_accecn(struct tcp_out_options *opts, int required,
 		}
 		return 0;
 	}
+
+	if (XXXDEBUG(sk))
+		pr_info("num_accecn_fields: %d size: %d\n",
+			opts->num_accecn_fields, size);
 
 	opts->options |= OPTION_ACCECN;
 	return size;
@@ -1012,7 +1041,7 @@ static unsigned int tcp_syn_options(struct sock *sk, struct sk_buff *skb,
 		     sock_net(sk)->ipv4.sysctl_tcp_ecn_option &&
 		     (remaining >= TCPOLEN_ACCECN_BASE))) {
 		opts->ecn_bytes = synack_ecn_bytes;
-		remaining -= tcp_options_fit_accecn(opts, 0, remaining,
+		remaining -= tcp_options_fit_accecn(sk, opts, 0, remaining,
 						    tcp_synack_options_combine_saving(opts));
 	}
 
@@ -1090,7 +1119,7 @@ static unsigned int tcp_synack_options(const struct sock *sk,
 	if (treq->accecn_ok && sock_net(sk)->ipv4.sysctl_tcp_ecn_option &&
 	    req->num_timeout < 1 && (remaining >= TCPOLEN_ACCECN_BASE)) {
 		opts->ecn_bytes = synack_ecn_bytes;
-		remaining -= tcp_options_fit_accecn(opts, 0, remaining,
+		remaining -= tcp_options_fit_accecn(sk, opts, 0, remaining,
 						    tcp_synack_options_combine_saving(opts));
 	}
 
@@ -1166,6 +1195,10 @@ static unsigned int tcp_established_options(struct sock *sk, struct sk_buff *skb
 		opts->num_sack_blocks = 0;
 	}
 
+	if (XXXDEBUG(sk))
+		pr_info("tcp_established_options: tcp_ecn_mode_accecn: %d tcp_ecn_option: %d saw_accecn_opt: %d accecn_minlen: %d\n",
+			tcp_ecn_mode_accecn(tp), sock_net(sk)->ipv4.sysctl_tcp_ecn_option,
+			tp->saw_accecn_opt, tp->accecn_minlen);
 	if (tcp_ecn_mode_accecn(tp) &&
 	    sock_net(sk)->ipv4.sysctl_tcp_ecn_option &&
 	    (tp->saw_accecn_opt && tp->saw_accecn_opt != TCP_ACCECN_OPT_FAIL)) {
@@ -1173,7 +1206,7 @@ static unsigned int tcp_established_options(struct sock *sk, struct sk_buff *skb
 		    tp->accecn_opt_demand ||
 		    tcp_accecn_option_beacon_check(sk)) {
 			opts->ecn_bytes = tp->received_ecn_bytes;
-			size += tcp_options_fit_accecn(opts, tp->accecn_minlen,
+			size += tcp_options_fit_accecn(sk, opts, tp->accecn_minlen,
 						       MAX_TCP_OPTION_SPACE - size,
 						       opts->num_sack_blocks > 0 ?
 						       2 : 0);
