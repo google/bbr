@@ -13,11 +13,11 @@ sysctl -q net.ipv4.tcp_ecn=3
 
 +0.01 write(4, ..., 1000) = 1000
 +.002 > [ect0] EAP. 1:1001(1000) ack 1
-+.05 < [ect0] EAP. 1:1(0) ack 1001 win 256 <AccECNEXP0 e0b 1001 ceb 0 e1b 0,nop,nop,nop>
++.05 < [ect0] EAP. 1:1(0) ack 1001 win 256 <ECN e0b 1001 ceb 0 e1b 0,nop,nop,nop>
 
 +0.01 %{ assert tcpi_delivered_ce == 0, tcpi_delivered_ce }%
 
 +0.01 write(4, ..., 1000) = 1000
-+.002 > [ect0] EAP. 1001:2001(1000) ack 1 <AccECNEXP0 e0b 1 ceb 0 e1b 0,nop,nop,nop>
++.002 > [ect0] EAP. 1001:2001(1000) ack 1 <ECN e0b 1 ceb 0 e1b 0,nop,nop,nop>
 
 +0.01 %{ assert tcpi_delivered_ce == 0, tcpi_delivered_ce }%
