@@ -493,7 +493,7 @@ static bool tcp_ecn_rcv_ecn_echo(const struct tcp_sock *tp, const struct tcphdr 
 /* Maps IP ECN field ECT/CE code point to AccECN option field number, given
  * we are sending fields with Accurate ECN Order 1: ECT(1), CE, ECT(0).
  */
-static unsigned int tcp_ecnfield_to_accecn_optfield(u8 ecnfield)
+static u8 tcp_ecnfield_to_accecn_optfield(u8 ecnfield)
 {
 	switch (ecnfield) {
 	case INET_ECN_NOT_ECT:
@@ -510,6 +510,27 @@ static unsigned int tcp_ecnfield_to_accecn_optfield(u8 ecnfield)
 	return 0;
 }
 
+/* Maps IP ECN field ECT/CE code point to AccECN option field value offset.
+ * Some fields do not start from zero, to detect zeroing by middleboxes.
+ */
+static u32 tcp_accecn_field_init_offset(u8 ecnfield)
+{
+	switch (ecnfield) {
+	case INET_ECN_NOT_ECT:
+		return 0;	/* AccECN does not send counts of NOT_ECT */
+	case INET_ECN_ECT_1:
+		return TCP_ACCECN_E1B_INIT_OFFSET;
+	case INET_ECN_CE:
+		return TCP_ACCECN_CEB_INIT_OFFSET;
+	case INET_ECN_ECT_0:
+		return TCP_ACCECN_E0B_INIT_OFFSET;
+	default:
+		WARN_ONCE(1, "bad ECN code point: %d\n", ecnfield);
+	}
+	return 0;
+}
+
+
 /* Maps AccECN option field #nr to IP ECN field ECT/CE bits */
 static unsigned int tcp_accecn_optfield_to_ecnfield(unsigned int optfield, bool order1)
 {
@@ -523,12 +544,11 @@ static unsigned int tcp_accecn_optfield_to_ecnfield(unsigned int optfield, bool 
 
 
 /* Handles AccECN option ECT and CE 24-bit byte counters update into
- * the u32 value in tcp_sock. As we're processing TCP options, it is
- * safe to access from - 1.
+ * the u32 value in tcp_sock.
  */
 static s32 tcp_update_ecn_bytes(u32 *cnt, const char *from, u32 init_offset)
 {
-	u32 truncated = (get_unaligned_be32(from - 1) - init_offset) & 0xFFFFFFU;
+	u32 truncated = (get_unaligned_be24(from) - init_offset) & 0xFFFFFFU;
 	u32 delta = (truncated - *cnt) & 0xFFFFFFU;
 
 	/* If delta has the highest bit set (24th bit) indicating negative,
@@ -586,9 +606,7 @@ static bool tcp_accecn_process_option(struct tcp_sock *tp,
 	for (i = 0; i < 3; i++) {
 		if (optlen >= TCPOLEN_ACCECN_PERFIELD) {
 			u8 ecnfield = tcp_accecn_optfield_to_ecnfield(i, order1);
-			u32 init_offset = ecnfield == INET_ECN_ECT_0 ?
-					  TCP_ACCECN_E0B_INIT_OFFSET :
-					  TCP_ACCECN_E1B_INIT_OFFSET;
+			u32 init_offset = tcp_accecn_field_init_offset(ecnfield);
 			s32 delta;
 
 			delta = tcp_update_ecn_bytes(&(tp->delivered_ecn_bytes[ecnfield - 1]),
