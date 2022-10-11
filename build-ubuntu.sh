@@ -27,7 +27,7 @@ ${VERBOSE}
 
 BRANCH=`git rev-parse --abbrev-ref HEAD | sed s/-/+/g`
 SHA1=`git rev-parse --short HEAD`
-LOCALVERSION=+${BRANCH}+${SHA1}+UBUNTU
+LOCALVERSION=+${BRANCH}+${SHA1}
 PKG_DIR=${PWD}/gce/${LOCALVERSION}/pkg
 INSTALL_DIR=${PWD}/gce/${LOCALVERSION}/install
 BUILD_DIR=${PWD}/gce/${LOCALVERSION}/build

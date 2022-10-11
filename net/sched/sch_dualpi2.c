@@ -43,7 +43,7 @@
  * (~4MHz) as those are given in 1/256th. This enable to tune alpha/beta to
  * control flows whose maximal RTTs can be in usec up to few secs.
  */
-#define ALPHA_BETA_MAX ((2 << 31) - 1)
+#define ALPHA_BETA_MAX ((1U << 31) - 1)
 /* Internal alpha/beta are in units of 64ns.
  * This enables to use all alpha/beta values in the allowed range without loss
  * of precision due to rounding when scaling them internally, e.g.,
@@ -348,7 +348,7 @@ static int dualpi2_skb_classify(struct dualpi2_sched_data *q,
 		return NET_XMIT_SUCCESS;
 	}
 
-	result = tcf_classify(skb, fl, &res, false);
+	result = tcf_classify(skb, NULL, fl, &res, false);
 	if (result >= 0) {
 #ifdef CONFIG_NET_CLS_ACT
 		switch (result) {
