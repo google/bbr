@@ -353,7 +353,11 @@ static bool bbr_precise_ece_ack = true;		/* default: enabled */
  */
 static u32 bbr_cwnd_warn_val	= 1U << 20;
 
+/* Print debug log line if socket dst port & this mask is zero: */
 static u16 bbr_debug_port_mask;
+
+/* Print debug log line if socket src port matches this single port: */
+static u16 bbr_debug_src_port;
 
 /* BBR module parameters. These are module parameters only in Google prod.
  * Upstream these are intentionally not module parameters.
@@ -408,6 +412,7 @@ module_param_named(probe_rtt_cwnd_gain,
 		   bbr_probe_rtt_cwnd_gain,		     uint,   0664);
 module_param_named(cwnd_warn_val,     bbr_cwnd_warn_val,     uint,   0664);
 module_param_named(debug_port_mask,   bbr_debug_port_mask,   ushort, 0644);
+module_param_named(debug_src_port,    bbr_debug_src_port,    ushort, 0644);
 module_param_named(flags,             bbr_flags,             uint,   0644);
 module_param_named(debug_ftrace,      bbr_debug_ftrace, bool,   0644);
 module_param_named(debug_with_printk, bbr_debug_with_printk, bool,   0644);
@@ -529,9 +534,9 @@ static void bbr_debug(struct sock *sk, u32 acked,
 	struct bbr *bbr = inet_csk_ca(sk);
 	const u32 una = tp->snd_una - bbr->debug.snd_isn;
 	const u32 fack = tcp_highest_sack_seq(tp);
+	const u16 sport = ntohs(inet_sk(sk)->inet_sport);
 	const u16 dport = ntohs(inet_sk(sk)->inet_dport);
-	bool is_port_match = (bbr_debug_port_mask &&
-			      ((dport & bbr_debug_port_mask) == 0));
+	bool is_src_port_match, is_dst_port_match;
 	char debugmsg[320];
 
 	if (sk->sk_state == TCP_SYN_SENT)
@@ -565,7 +570,13 @@ static void bbr_debug(struct sock *sk, u32 acked,
 	if (likely(!bbr_debug_with_printk && !bbr_debug_ftrace))
 		return;
 
-	if (!sock_flag(sk, SOCK_DBG) && !is_port_match)
+	is_src_port_match = (bbr_debug_src_port &&
+			     (sport == bbr_debug_src_port));
+	is_dst_port_match = (bbr_debug_port_mask &&
+			     (dport & bbr_debug_port_mask) == 0);
+
+	if (!sock_flag(sk, SOCK_DBG) &&
+	    !is_src_port_match && !is_dst_port_match)
 		return;
 
 	if (!ctx->log && !tp->app_limited && !(bbr_flags & FLAG_DEBUG_VERBOSE))
