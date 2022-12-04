@@ -156,8 +156,8 @@ typedef unsigned long long u64;
 For QUIC BBR:
 
 - The latest code:
-  - https://cs.chromium.org/chromium/src/net/third_party/quiche/src/quic/core/congestion_control/bbr_sender.cc
-  - https://cs.chromium.org/chromium/src/net/third_party/quiche/src/quic/core/congestion_control/bbr_sender.h
+  - https://github.com/google/quiche/blob/main/quiche/quic/core/congestion_control/bbr_sender.cc
+  - https://github.com/google/quiche/blob/main/quiche/quic/core/congestion_control/bbr_sender.h
 
 ## How can I visualize the behavior of QUIC connections?
 
