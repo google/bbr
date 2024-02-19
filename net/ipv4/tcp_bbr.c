@@ -37,10 +37,10 @@
  * In steady state a BBR flow only uses PROBE_BW and PROBE_RTT.
  * A long-lived BBR flow spends the vast majority of its time remaining
  * (repeatedly) in PROBE_BW, fully probing and utilizing the pipe's bandwidth
- * in a fair manner, with a small, bounded queue. *If* a flow has been
- * continuously sending for the entire min_rtt window, and hasn't seen an RTT
- * sample that matches or decreases its min_rtt estimate for 10 seconds, then
- * it briefly enters PROBE_RTT to cut inflight to a minimum value to re-probe
+ * in a fair manner, with a small, bounded queue. *If* a flow has not seen
+ * a measured RTT reduction for probe_rtt_win_ms (likely meaning it has been
+ * continuously sending for the entire probe_rtt_win_ms interval) then
+ * it briefly enters PROBE_RTT to cut inflight to a smaller value to re-probe
  * the path's two-way propagation delay (min_rtt). When exiting PROBE_RTT, if
  * we estimated that we reached the full bw of the pipe then we enter PROBE_BW;
  * otherwise we enter STARTUP to try to fill the pipe.
@@ -868,16 +868,18 @@ static void bbr_check_probe_rtt_done(struct sock *sk)
  * small (reducing queuing delay and packet loss) and achieve fairness among
  * BBR flows.
  *
- * The min_rtt filter window is 10 seconds. When the min_rtt estimate expires,
- * we enter PROBE_RTT mode and cap the cwnd at bbr_cwnd_min_target=4 packets.
+ * The PROBE_RTT window is 5 seconds. When this interval has elapsed without
+ * measuring a lower RTT sample, we enter PROBE_RTT mode and reduce cwnd
+ * using the bbr_probe_rtt_cwnd_gain factor of 0.5x, i.e. cwnd ~= 0.5 * est_BDP.
  * After at least bbr_probe_rtt_mode_ms=200ms and at least one packet-timed
- * round trip elapsed with that flight size <= 4, we leave PROBE_RTT mode and
+ * round trip elapsed with the lower flight size, we leave PROBE_RTT mode and
  * re-enter the previous mode. BBR uses 200ms to approximately bound the
- * performance penalty of PROBE_RTT's cwnd capping to roughly 2% (200ms/10s).
+ * performance penalty of PROBE_RTT's cwnd capping to roughly 2% (note that
+ * the expected bandwidth utilization is 0.5*.2/5 + 1.0*( 5 - .2)/5 = 0.98).
  *
- * Note that flows need only pay 2% if they are busy sending over the last 10
+ * Note that flows need only pay 2% if they are busy sending over the last 5
  * seconds. Interactive applications (e.g., Web, RPCs, video chunks) often have
- * natural silences or low-rate periods within 10 seconds where the rate is low
+ * natural silences or low-rate periods within 5 seconds where the rate is low
  * enough for long enough to drain its queue in the bottleneck. We pick up
  * these min RTT measurements opportunistically with our min_rtt filter. :-)
  */
