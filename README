@@ -3,8 +3,8 @@ other materials related to the BBR congestion control algorithm.
 
 Quick links:
 
-- TCP BBR v2 Alpha/Preview Release:
-  https://github.com/google/bbr/blob/v2alpha/README.md
+- TCP BBRv3 Release:
+  https://github.com/google/bbr/blob/v3/README.md
 - BBR FAQ:
   https://github.com/google/bbr/blob/master/Documentation/bbr-faq.md
 - TCP BBR Quick-Start: Building and Running TCP BBR on Google Compute Engine:
@@ -13,20 +13,18 @@ Quick links:
   BBR-related discussions are very welcome in the public e-mail list for BBR:
   https://groups.google.com/d/forum/bbr-dev
 
-The latest Google code for the BBR congestion control algorithm is:
-
-  BBR v2 Alpha/Preview release
-  ----------------------------
+  Latest BBR code from our team
+  ------------------------------
 
   - For Linux TCP BBR:
-      https://github.com/google/bbr/blob/v2alpha/net/ipv4/tcp_bbr2.c
+     https://github.com/google/bbr/blob/v3/net/ipv4/tcp_bbr.c
 
   - For QUIC BBR:
       https://github.com/google/quiche/blob/main/quiche/quic/core/congestion_control/bbr2_sender.cc
       https://github.com/google/quiche/blob/main/quiche/quic/core/congestion_control/bbr2_sender.h
 
   BBR v1 release
-  ----------------------------
+  ------------------------------
 
   - For Linux TCP BBR:
       https://git.kernel.org/pub/scm/linux/kernel/git/davem/net-next.git/tree/net/ipv4/tcp_bbr.c
