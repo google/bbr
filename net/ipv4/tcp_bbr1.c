@@ -1163,7 +1163,7 @@ static struct tcp_congestion_ops tcp_bbr_cong_ops __read_mostly = {
 	.set_state	= bbr_set_state,
 };
 
-BTF_SET8_START(tcp_bbr_check_kfunc_ids)
+BTF_SET8_START(tcp_bbr1_check_kfunc_ids)
 #ifdef CONFIG_X86
 #ifdef CONFIG_DYNAMIC_FTRACE
 BTF_ID_FLAGS(func, bbr_init)
@@ -1176,11 +1176,11 @@ BTF_ID_FLAGS(func, bbr_min_tso_segs)
 BTF_ID_FLAGS(func, bbr_set_state)
 #endif
 #endif
-BTF_SET8_END(tcp_bbr_check_kfunc_ids)
+BTF_SET8_END(tcp_bbr1_check_kfunc_ids)
 
 static const struct btf_kfunc_id_set tcp_bbr_kfunc_set = {
 	.owner = THIS_MODULE,
-	.set   = &tcp_bbr_check_kfunc_ids,
+	.set   = &tcp_bbr1_check_kfunc_ids,
 };
 
 static int __init bbr_register(void)
