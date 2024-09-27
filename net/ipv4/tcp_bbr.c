@@ -481,7 +481,7 @@ static u32 bbr_tso_segs_generic(struct sock *sk, unsigned int mss_now,
 {
 	struct bbr *bbr = inet_csk_ca(sk);
 	u32 segs, r;
-	u64 bytes;
+	unsigned long bytes;
 
 	/* Budget a TSO/GSO burst size allowance based on bw (pacing_rate). */
 	bytes = sk->sk_pacing_rate >> sk->sk_pacing_shift;
